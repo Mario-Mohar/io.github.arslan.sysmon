@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.arslan.sysmon",
+  "name": "SysMon",
+  "version": "1.0.0",
+  "author": "arslan",
+  "license": "MIT",
+  "description": "Compact CPU, memory, temperature, and disk stats in the Omarchy bar with click-to-expand detail panels.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "SysMon.qml"
+  },
+  "barWidget": {
+    "displayName": "SysMon",
+    "description": "CPU, memory, temperature, and disk stats. Click each to open a detail panel.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "interval": 2,
+      "showCpu": true,
+      "showMemory": true,
+      "showTemp": true,
+      "showDisk": true,
+      "showIcons": true,
+      "cpuWarnPercent": 90,
+      "memWarnPercent": 90,
+      "onClick": "omarchy-launch-or-focus-tui btop"
+    },
+    "schema": [
+      {
+        "key": "interval",
+        "type": "integer",
+        "label": "Sample interval (seconds)",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 2,
+        "description": "How often to read /proc and /sys."
+      },
+      {
+        "key": "showCpu",
+        "type": "boolean",
+        "label": "Show CPU",
+        "defaultValue": true
+      },
+      {
+        "key": "showMemory",
+        "type": "boolean",
+        "label": "Show memory",
+        "defaultValue": true
+      },
+      {
+        "key": "showTemp",
+        "type": "boolean",
+        "label": "Show temperature",
+        "defaultValue": true
+      },
+      {
+        "key": "showDisk",
+        "type": "boolean",
+        "label": "Show disk",
+        "defaultValue": true
+      },
+      {
+        "key": "showIcons",
+        "type": "boolean",
+        "label": "Show icons",
+        "defaultValue": true,
+        "description": "Turn off for text-only if your font lacks Nerd Font glyphs."
+      },
+      {
+        "key": "cpuWarnPercent",
+        "type": "integer",
+        "label": "CPU warning threshold (%)",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 90,
+        "description": "Above this the reading uses the urgent colour. 0 disables."
+      },
+      {
+        "key": "memWarnPercent",
+        "type": "integer",
+        "label": "Memory warning threshold (%)",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 90,
+        "description": "Above this the reading uses the urgent colour. 0 disables."
+      },
+      {
+        "key": "onClick",
+        "type": "string",
+        "label": "Click command",
+        "defaultValue": "omarchy-launch-or-focus-tui btop",
+        "description": "Run when any bar segment is clicked. Leave empty to disable."
+      }
+    ]
+  }
+}
