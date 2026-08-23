@@ -3,5 +3,7 @@
 skills-lock.json
 backup/
 AGENTS.md
+__pycache__/
+*.pyc
 todo
 test.md
