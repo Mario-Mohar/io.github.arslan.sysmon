@@ -58,7 +58,7 @@ Full gallery (CPU, Temps, Memory, Disks, SMART, GPU, Network, Processes): [scree
 - IPC handler exposes `showTab(key)` for shell hotkeys (see table below)
 - Temperature bands, fan rows, and clickable GPU/NVMe device links in the Temp tab
 
-See [features.md](features.md) for planned work.
+See [screenshots/README.md](screenshots/README.md) for the full UI gallery.
 
 ## Requirements
 
