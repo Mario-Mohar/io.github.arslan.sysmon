@@ -16,8 +16,16 @@ import glob
 import subprocess
 import shutil
 
-CLK_TCK = os.sysconf("SC_CLK_TCK")
-PAGE = os.sysconf("SC_PAGE_SIZE")
+try:
+    CLK_TCK = os.sysconf("SC_CLK_TCK")
+except (ValueError, OSError):
+    CLK_TCK = 100
+
+try:
+    PAGE = os.sysconf("SC_PAGE_SIZE")
+except (ValueError, OSError):
+    PAGE = 4096
+
 NCPU = os.cpu_count() or 1
 
 PSEUDO_FS = {
@@ -62,6 +70,8 @@ def cpu_times():
         parts = line.split()
         name = parts[0]
         vals = [int(x) for x in parts[1:]]
+        if len(vals) < 4:
+            continue
         idle = vals[3] + (vals[4] if len(vals) > 4 else 0)
         total = sum(vals)
         out[name] = (idle, total)
@@ -180,8 +190,11 @@ class Rapl:
         if self.prev:
             pv, pt = self.prev
             dt = now - pt
-            if dt > 0 and v >= pv:
-                w = (v - pv) / 1e6 / dt
+            if dt > 0:
+                if v < pv:
+                    v += 2**32  # Handle 32-bit counter wraparound
+                if v >= pv:
+                    w = (v - pv) * 1e-6 / dt
         self.prev = (v, now)
         return w
 
@@ -277,7 +290,7 @@ def block_devices():
     """All physical block devices (partitions excluded), including drives
     with no mount - USB sticks show up here even when unplugged-from-fstab."""
     out = []
-    for path in sorted(__import__("glob").glob("/sys/class/block/*")):
+    for path in sorted(glob.glob("/sys/class/block/*")):
         name = os.path.basename(path)
         if os.path.exists(os.path.join(path, "partition")):
             continue
@@ -304,7 +317,31 @@ def block_devices():
             "removable": read_str(os.path.join(real, "removable")) == "1",
             "transport": transport,
         })
+    parts_by_drive = lsblk_partitions()
+    for entry in out:
+        entry["children"] = parts_by_drive.get(entry["name"], [])
     return out
+
+
+def lsblk_partitions():
+    kids = {}
+    try:
+        proc = subprocess.run(["lsblk", "--bytes", "--json", "--output", "NAME,FSTYPE,MOUNTPOINT,SIZE"], capture_output=True, text=True, timeout=2)
+        data = json.loads(proc.stdout or "{}")
+    except Exception:
+        return kids
+    for top in data.get("blockdevices", []):
+        arr = []
+        for ch in top.get("children", []) or []:
+            arr.append({
+                "name": ch.get("name", ""),
+                "fstype": ch.get("fstype"),
+                "mountpoint": ch.get("mountpoint"),
+                "bytes": int(ch.get("size") or 0),
+            })
+        if arr:
+            kids[top.get("name", "")] = arr
+    return kids
 
 
 def block_model(dev):
@@ -425,7 +462,8 @@ def wifi_ssids():
         for line in out.splitlines():
             line = line.strip()
             if line.startswith("SSID:"):
-                ssids[iface] = line[5:].strip()
+                raw = line[5:].strip()
+                ssids[iface] = bytes(raw, "utf-8").decode("unicode_escape").encode("latin-1", "ignore").decode("utf-8", "ignore") if chr(92) + "x" in raw else raw
     return ssids
 
 

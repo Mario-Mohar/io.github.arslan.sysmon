@@ -120,7 +120,7 @@ QtObject {
     var swapFree = vals["SwapFree"] || 0
 
     if (memTotal > 0) {
-      memUsed = memTotal - memFree - memBuffers - memCached
+      memUsed = Math.max(0, memTotal - memFree - memBuffers - memCached)
       memPercent = Math.round((memUsed / memTotal) * 100)
     }
     if (swapTotal > 0) {

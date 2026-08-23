@@ -41,6 +41,16 @@ Column {
     font.pixelSize: Style.font.bodySmall
   }
 
+  Text {
+    visible: panel.mountErr !== ""
+    width: parent.width
+    text: panel.mountErr
+    color: "#ff9933"
+    font.family: panel.fontFamily
+    font.pixelSize: Style.font.caption
+    wrapMode: Text.WrapAnywhere
+  }
+
   Repeater {
     model: panel.snapshot && panel.snapshot.blockdevs ? panel.snapshot.blockdevs : []
 
@@ -52,21 +62,35 @@ Column {
       spacing: Style.space(8)
 
       property bool expanded: false
-      readonly property var partitions: {
+      property bool showAll: false
+
+      function matchPart(d) {
         var name = modelData.name
-        var out = []
-        for (var i = 0; i < panel.disks.length; i++) {
-          var d = panel.disks[i]
-          if (!d || !d.source) continue
-          if (d.smart_dev === name
-              || d.source === "/dev/" + name
-              || d.source.indexOf("/dev/" + name + "p") === 0
-              || d.source.indexOf("/dev/" + name + "/") === 0) {
-            out.push(d)
-          }
-        }
-        return out
+        return d.smart_dev === name || d.source === "/dev/" + name || String(d.source).indexOf("/dev/" + name + "p") === 0 || String(d.source).indexOf("/dev/" + name + "/") === 0
       }
+
+      function isUnmountable(fstype) {
+        var t = String(fstype || "").toLowerCase()
+        return t === "swap" || t === "linux_raid_member" || t === "bios_boot" || t === "extended"
+      }
+
+      readonly property var partitions: panel.disks.filter(function (d) {
+        return !!d && !!d.source && driveCard.matchPart(d) && (driveCard.showAll || d.mount === "/")
+      })
+
+      readonly property var allPartitions: panel.disks.filter(function (d) {
+        return !!d && !!d.source && driveCard.matchPart(d)
+      })
+
+      readonly property var rawKids: (modelData.children || []).filter(function (c) {
+        for (var i = 0; i < allPartitions.length; i++) {
+          var src = allPartitions[i] ? String(allPartitions[i].source || "") : ""
+          if (src === "/dev/" + c.name) return false
+        }
+        return !c.mountpoint
+      })
+
+      readonly property int hiddenCount: rawKids.length
       readonly property bool activeSmart: panel.smartDev === modelData.name
 
       PanelSeparator { visible: index > 0; foreground: panel.foreground }
@@ -83,13 +107,39 @@ Column {
         spacing: Style.space(6)
         visible: driveCard.partitions.length > 0
 
-        Text {
-          text: "PARTITIONS"
-          color: panel.faint
-          font.family: panel.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
-          font.letterSpacing: 1
+        Item {
+          width: parent.width
+          implicitHeight: partsHdr.implicitHeight
+
+          Text {
+            id: partsHdr
+            text: "PARTITIONS"
+            color: panel.faint
+            font.family: panel.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+          }
+
+          Text {
+            id: partsMore
+            text: driveCard.showAll ? "less ▴" : "+" + driveCard.hiddenCount + " unmounted"
+            visible: driveCard.showAll || driveCard.hiddenCount !== 0
+            color: "#ffb800"
+            font.bold: true
+            font.family: panel.fontFamily
+            font.pixelSize: Style.font.caption
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: driveCard.showAll = !driveCard.showAll
+            }
+          }
         }
 
         Repeater {
@@ -209,8 +259,62 @@ Column {
         }
       }
 
+      Repeater {
+        model: driveCard.rawKids
+
+        delegate: Column {
+          required property var modelData
+          width: parent.width
+          spacing: Style.space(2)
+
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(childName.implicitHeight, childMeta.implicitHeight, mountBtn.visible ? mountBtn.implicitHeight : 0)
+
+            Text {
+              id: childName
+              text: String(modelData.name || "")
+              color: panel.foreground
+              font.family: panel.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: childMeta
+              text: String(modelData.fstype || "?") + " · " + Model.bytes(modelData.bytes || 0) + (modelData.mountpoint ? " (" + modelData.mountpoint + ")" : "(unmounted)")
+              color: modelData.mountpoint ? panel.dim : "#ffb800"
+              font.family: panel.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.right: mountBtn.visible ? mountBtn.left : parent.right
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Button {
+              id: mountBtn
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              visible: !modelData.mountpoint && !driveCard.isUnmountable(modelData.fstype)
+              text: panel.mountBusy ? "…" : "MOUNT"
+              fontSize: Style.font.caption
+              foreground: panel.foreground
+              fontFamily: panel.fontFamily
+              bordered: true
+              horizontalPadding: Style.space(8)
+              verticalPadding: Style.spacing.controlPaddingY
+              onClicked: {
+                driveCard.showAll = true
+                panel.mountDevice("/dev/" + modelData.name)
+              }
+            }
+          }
+        }
+      }
+
       Text {
-        visible: driveCard.partitions.length === 0
+        visible: driveCard.partitions.length === 0 && !(modelData.children && modelData.children.length !== 0)
         text: "NO PARTITIONS"
         color: panel.dim
         font.family: panel.fontFamily

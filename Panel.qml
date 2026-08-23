@@ -201,6 +201,49 @@ Panel {
     smartProc.running = true
   }
 
+  property bool mountBusy: false
+  property string mountErr: ""
+
+  Process {
+    id: mountProc
+    stdout: StdioCollector { }
+    stderr: StdioCollector { onStreamFinished: root.mountErr = this.text.trim() }
+    onExited: {
+      mountTimeoutTimer.stop()
+      root.mountBusy = false
+      if (this.exitCode !== 0 && root.mountErr === "") root.mountErr = "mount failed"
+    }
+  }
+
+  function mountDevice(dev) {
+    if (!dev || root.mountBusy) return
+    root.mountErr = ""
+    root.mountBusy = true
+    mountProc.command = ["udisksctl", "mount", "-b", dev]
+    mountProc.running = true
+    mountTimeoutTimer.restart()
+  }
+
+  Timer {
+    id: mountErrTimer
+    interval: 5000
+    onTriggered: root.mountErr = ""
+  }
+
+  Timer {
+    id: mountTimeoutTimer
+    interval: 15000
+    onTriggered: {
+      if (root.mountBusy) {
+        mountProc.running = false
+        root.mountBusy = false
+        root.mountErr = "Mount timed out"
+      }
+    }
+  }
+
+  onMountErrChanged: { if (mountErr !== "") mountErrTimer.restart() }
+
   function parseSmart(text) {
     var rows = []
     var verdict = null
@@ -333,7 +376,7 @@ Panel {
     if (tabKey === "cpu") return "CPU"
     if (tabKey === "temp") return "TEMPERATURE"
     if (tabKey === "mem") return "MEMORY"
-    if (tabKey === "disk") return disks.length ? Model.mountLabel(disks[0].mount).toUpperCase() : "DISK"
+    if (tabKey === "disk") return disks.length ? Model.mountLabel(disks[0].mount || "/").toUpperCase() : "DISK"
     if (tabKey === "net") return "RECEIVING"
     if (tabKey === "gpu") return "GPU"
     if (tabKey === "proc") return "PROCESSES"
