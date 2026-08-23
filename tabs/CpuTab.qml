@@ -56,7 +56,7 @@ Column {
     id: coreGrid
     width: parent.width
     readonly property int coreCount: panel.cpu ? panel.cpu.cores.length : 0
-    columns: coreCount > 32 ? 4 : (coreCount > 12 ? 2 : 1)
+    columns: coreCount > 32 ? 4 : (coreCount > 4 ? 2 : 1)
     columnSpacing: Style.space(20)
     rowSpacing: Style.space(4)
     readonly property real cellWidth: (width - columnSpacing * (columns - 1)) / columns

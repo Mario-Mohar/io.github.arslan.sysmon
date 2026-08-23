@@ -378,7 +378,7 @@ def mounts():
             continue
         if not (source.startswith("/dev/") or ":" in source or source.startswith("//") or fstype in ("nfs", "nfs4", "cifs", "smb3")):
             continue
-        if target.startswith(("/proc", "/sys", "/dev", "/run/", "/snap/", "/var/lib/docker", "/var/lib/containers")):
+        if target.startswith(("/proc", "/sys", "/dev", "/run/user", "/run/lock", "/run/snap", "/snap/", "/var/lib/docker", "/var/lib/containers")):
             continue
         try:
             st = os.statvfs(target)

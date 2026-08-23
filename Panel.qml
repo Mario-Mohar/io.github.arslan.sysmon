@@ -8,7 +8,7 @@ import "Model.js" as Model
 import "components"
 import "tabs"
 
-// Vitals: a calm system monitor panel. One tab at a time — CPU, Memory,
+// SysMon: a calm system monitor panel. One tab at a time — CPU, Memory,
 // Disks, Network, GPU, Processes — fed by collector.py, which only runs while
 // the panel is open. Each tab is a Loader that is only alive while selected,
 // so a hidden tab costs nothing per sample.
@@ -203,6 +203,7 @@ Panel {
 
   property bool mountBusy: false
   property string mountErr: ""
+  property string lastMountDev: ""
 
   Process {
     id: mountProc
@@ -211,15 +212,44 @@ Panel {
     onExited: {
       mountTimeoutTimer.stop()
       root.mountBusy = false
-      if (this.exitCode !== 0 && root.mountErr === "") root.mountErr = "mount failed"
+      if (this.exitCode !== 0) {
+        var e = root.mountErr.toLowerCase()
+        if (e.indexOf("superblock") !== -1 || e.indexOf("bad option") !== -1) {
+          root.mountErr = "Bad superblock — try: sudo ntfsfix " + root.lastMountDev
+        } else if (e.indexOf("wrong fs type") !== -1 || e.indexOf("missing codepage") !== -1) {
+          root.mountErr = "Missing filesystem driver — install: sudo pacman -S ntfs-3g"
+        } else if (e.indexOf("already mounted") !== -1) {
+          root.mountErr = "Already mounted"
+        } else if (e.indexOf("no medium") !== -1) {
+          root.mountErr = "No medium found — check device"
+        } else if (root.mountErr === "") {
+          root.mountErr = "Mount failed (exit " + this.exitCode + ")"
+        }
+      }
+      if (root.mountErr !== "") mountErrTimer.restart()
     }
   }
 
-  function mountDevice(dev) {
+  function mountDevice(dev, mountPath) {
     if (!dev || root.mountBusy) return
+    root.lastMountDev = dev
     root.mountErr = ""
     root.mountBusy = true
-    mountProc.command = ["udisksctl", "mount", "-b", dev]
+    if (mountPath && mountPath !== "") {
+      mountProc.command = ["bash", "-c", "pkexec mkdir -p " + mountPath + " && pkexec mount " + dev + " " + mountPath]
+    } else {
+      mountProc.command = ["udisksctl", "mount", "-b", dev]
+    }
+    mountProc.running = true
+    mountTimeoutTimer.restart()
+  }
+
+  function unmountDevice(dev) {
+    if (!dev || root.mountBusy) return
+    root.lastMountDev = dev
+    root.mountErr = ""
+    root.mountBusy = true
+    mountProc.command = ["udisksctl", "unmount", "-b", dev]
     mountProc.running = true
     mountTimeoutTimer.restart()
   }
@@ -668,7 +698,7 @@ Panel {
               spacing: Style.space(2)
 
               Text {
-                text: root.snapshot ? root.snapshot.host : "Vitals"
+                text: root.snapshot ? root.snapshot.host : "SysMon"
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.title

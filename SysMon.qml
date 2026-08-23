@@ -14,7 +14,14 @@ BarWidget {
   }
 
   readonly property color white: "#ffffff"
-  readonly property real tempC: sys.tempCurrent / 1000
+
+  // Prefer panel snapshot data when panel is open, fall back to SysMonCore
+  readonly property var snap: panelLoader.item && panelLoader.item.snapshot ? panelLoader.item.snapshot : null
+  readonly property real cpuPercent: snap && snap.cpu ? snap.cpu.total : sys.cpuPercent
+  readonly property real memPercent: snap ? (snap.mem && snap.mem.total > 0 ? (snap.mem.used / snap.mem.total * 100) : sys.memPercent) : sys.memPercent
+  readonly property real tempC: snap && snap.cpu && snap.cpu.temp !== null && snap.cpu.temp !== undefined ? snap.cpu.temp / 1000 : sys.tempCurrent / 1000
+  readonly property real diskPercent: snap && snap.disk && snap.disk.total > 0 ? (snap.disk.used / snap.disk.total * 100) : sys.diskPercent
+  readonly property string cpuFreqText: snap && snap.cpu && snap.cpu.freq_mhz ? (snap.cpu.freq_mhz >= 1000 ? (snap.cpu.freq_mhz / 1000).toFixed(1) + "GHz" : snap.cpu.freq_mhz + "MHz") : freqText()
 
   function stateColor(val, base) {
     if (val >= 80) return "#ff3333"
@@ -26,8 +33,8 @@ BarWidget {
     return val >= 80 ? "#ff3333" : white
   }
 
-  function pillColor() {
-    return Qt.lighter(Color.bar.background, 1.2)
+  function pillColor(active) {
+    return active ? Qt.lighter(Color.bar.background, 1.5) : Qt.lighter(Color.bar.background, 1.2)
   }
 
   function tempIcon() {
@@ -89,13 +96,13 @@ BarWidget {
       implicitWidth: cpuBtn.implicitWidth
       implicitHeight: cpuBtn.implicitHeight
       radius: height / 2
-      color: pillColor()
+      color: pillColor(root.opened)
 
       WidgetButton {
         id: cpuBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(sys.cpuPercent, "#4da6ff") + "'>\u{F035B}</font> <font color='" + textColor(sys.cpuPercent) + "'>" + freqText() + " (" + Math.round(sys.cpuPercent) + "%)</font>"
+        text: "<font color='" + stateColor(root.cpuPercent, "#4da6ff") + "'>\u{F035B}</font> <font color='" + textColor(root.cpuPercent) + "'>" + root.cpuFreqText + " (" + Math.round(root.cpuPercent) + "%)</font>"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
@@ -108,17 +115,17 @@ BarWidget {
       implicitWidth: memBtn.implicitWidth
       implicitHeight: memBtn.implicitHeight
       radius: height / 2
-      color: pillColor()
+      color: pillColor(root.opened)
 
       WidgetButton {
         id: memBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(sys.memPercent, "#66ff66") + "'>\u{F046D}</font> <font color='" + textColor(sys.memPercent) + "'>" + Math.round(sys.memPercent) + "%</font>"
+        text: "<font color='" + stateColor(root.memPercent, "#66ff66") + "'>\u{F046D}</font> <font color='" + textColor(root.memPercent) + "'>" + Math.round(root.memPercent) + "%</font>"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
-        tooltipText: Fmt.bytes(sys.memUsed) + " / " + Fmt.bytes(sys.memTotal)
+        tooltipText: snap && snap.mem ? Fmt.bytes(snap.mem.used) + " / " + Fmt.bytes(snap.mem.total) : Fmt.bytes(sys.memUsed) + " / " + Fmt.bytes(sys.memTotal)
         onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("mem") }
       }
     }
@@ -127,17 +134,17 @@ BarWidget {
       implicitWidth: tempBtn.implicitWidth
       implicitHeight: tempBtn.implicitHeight
       radius: height / 2
-      color: pillColor()
+      color: pillColor(root.opened)
 
       WidgetButton {
         id: tempBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(tempC, tempC >= 50 ? "#ff9933" : "#4da6ff") + "'>" + tempIcon() + "</font> <font color='" + textColor(tempC >= 80 ? 100 : 0) + "'>" + Math.round(tempC) + "\u00B0</font>"
+        text: "<font color='" + stateColor(root.tempC, root.tempC >= 50 ? "#ff9933" : "#4da6ff") + "'>" + tempIcon() + "</font> <font color='" + textColor(root.tempC >= 80 ? 100 : 0) + "'>" + Math.round(root.tempC) + "\u00B0</font>"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
-        tooltipText: Math.round(tempC) + "°C / " + Math.round(tempC * 1.8 + 32) + "°F"
+        tooltipText: Math.round(root.tempC) + "°C / " + Math.round(root.tempC * 1.8 + 32) + "°F"
         onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("temp") }
       }
     }
@@ -146,17 +153,17 @@ BarWidget {
       implicitWidth: diskBtn.implicitWidth
       implicitHeight: diskBtn.implicitHeight
       radius: height / 2
-      color: pillColor()
+      color: pillColor(root.opened)
 
       WidgetButton {
         id: diskBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(sys.diskPercent, white) + "'>\u{F02CA}</font> <font color='" + textColor(sys.diskPercent) + "'>" + Math.round(sys.diskPercent) + "%</font>"
+        text: "<font color='" + stateColor(root.diskPercent, white) + "'>\u{F02CA}</font> <font color='" + textColor(root.diskPercent) + "'>" + Math.round(root.diskPercent) + "%</font>"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
-        tooltipText: Fmt.bytes(sys.diskUsed) + " / " + Fmt.bytes(sys.diskTotal)
+        tooltipText: snap && snap.disk ? Fmt.bytes(snap.disk.used) + " / " + Fmt.bytes(snap.disk.total) : Fmt.bytes(sys.diskUsed) + " / " + Fmt.bytes(sys.diskTotal)
         onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("disk") }
       }
     }

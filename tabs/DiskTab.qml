@@ -27,6 +27,27 @@ Column {
 
   spacing: Style.space(12)
 
+  Item {
+    width: parent.width
+    height: panel.mountBusy ? Style.space(4) : 0
+    visible: panel.mountBusy
+
+    Rectangle {
+      anchors.left: parent.left
+      anchors.bottom: parent.bottom
+      width: parent.width * 0.6
+      height: parent.height
+      radius: height / 2
+      color: "#ffb800"
+
+      SequentialAnimation on x {
+        running: panel.mountBusy
+        loops: Animation.Infinite
+        NumberAnimation { from: -parent.parent.width * 0.6; to: parent.parent.width; duration: 1200; easing.type: Easing.InOutQuad }
+      }
+    }
+  }
+
   PanelSectionHeader {
     text: "DISKS"
     foreground: panel.foreground
@@ -62,20 +83,28 @@ Column {
       spacing: Style.space(8)
 
       property bool expanded: false
-      property bool showAll: false
+      property bool showRawKids: false
 
       function matchPart(d) {
         var name = modelData.name
-        return d.smart_dev === name || d.source === "/dev/" + name || String(d.source).indexOf("/dev/" + name + "p") === 0 || String(d.source).indexOf("/dev/" + name + "/") === 0
+        var src = String(d.source || "")
+        var prefix = "/dev/" + name
+        if (d.smart_dev === name) return true
+        if (src === prefix) return true
+        if (src.indexOf(prefix) === 0) {
+          var rest = src.charAt(prefix.length)
+          if (rest === "p" || rest === "s" || (rest >= "0" && rest <= "9") || rest === "/") return true
+        }
+        return false
       }
 
       function isUnmountable(fstype) {
         var t = String(fstype || "").toLowerCase()
-        return t === "swap" || t === "linux_raid_member" || t === "bios_boot" || t === "extended"
+        return t === "" || t === "null" || t === "swap" || t === "linux_raid_member" || t === "bios_boot" || t === "extended"
       }
 
       readonly property var partitions: panel.disks.filter(function (d) {
-        return !!d && !!d.source && driveCard.matchPart(d) && (driveCard.showAll || d.mount === "/")
+        return !!d && !!d.source && driveCard.matchPart(d)
       })
 
       readonly property var allPartitions: panel.disks.filter(function (d) {
@@ -125,8 +154,8 @@ Column {
 
           Text {
             id: partsMore
-            text: driveCard.showAll ? "less ▴" : "+" + driveCard.hiddenCount + " unmounted"
-            visible: driveCard.showAll || driveCard.hiddenCount !== 0
+            text: driveCard.showRawKids ? "less ▴" : "+" + driveCard.hiddenCount + " unmounted"
+            visible: driveCard.showRawKids || driveCard.hiddenCount !== 0
             color: "#ffb800"
             font.bold: true
             font.family: panel.fontFamily
@@ -137,7 +166,7 @@ Column {
             MouseArea {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
-              onClicked: driveCard.showAll = !driveCard.showAll
+              onClicked: driveCard.showRawKids = !driveCard.showRawKids
             }
           }
         }
@@ -254,13 +283,40 @@ Column {
                 value: String(partRow.modelData.source || "")
                 valueDim: true
               }
+
+              SectionRow {
+                visible: !!partRow.modelData.mount
+                label: "Mount"
+                value: String(partRow.modelData.mount || "")
+                valueDim: true
+              }
+
+              Item {
+                width: parent.width
+                height: unmountBtn.height + Style.space(8)
+
+                Button {
+                  id: unmountBtn
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: !!partRow.modelData.mount && partRow.modelData.mount !== "/"
+                  text: panel.mountBusy ? "…" : "UNMOUNT"
+                  fontSize: Style.font.caption
+                  foreground: "#ff6666"
+                  fontFamily: panel.fontFamily
+                  bordered: true
+                  horizontalPadding: Style.space(8)
+                  verticalPadding: Style.spacing.controlHeight * 0.14
+                  onClicked: panel.unmountDevice(partRow.modelData.source)
+                }
+              }
             }
           }
         }
       }
 
       Repeater {
-        model: driveCard.rawKids
+        model: driveCard.showRawKids ? driveCard.rawKids : []
 
         delegate: Column {
           required property var modelData
@@ -269,7 +325,7 @@ Column {
 
           Item {
             width: parent.width
-            implicitHeight: Math.max(childName.implicitHeight, childMeta.implicitHeight, mountBtn.visible ? mountBtn.implicitHeight : 0)
+              implicitHeight: Math.max(childName.implicitHeight, childMeta.implicitHeight, mountBtn.visible ? mountBtn.implicitHeight : 0, unmountBtn.visible ? unmountBtn.implicitHeight : 0, mountInput.visible ? mountInput.implicitHeight : 0)
 
             Text {
               id: childName
@@ -283,13 +339,84 @@ Column {
 
             Text {
               id: childMeta
-              text: String(modelData.fstype || "?") + " · " + Model.bytes(modelData.bytes || 0) + (modelData.mountpoint ? " (" + modelData.mountpoint + ")" : "(unmounted)")
-              color: modelData.mountpoint ? panel.dim : "#ffb800"
+              text: {
+                var fs = String(modelData.fstype || "")
+                var fsLabel = fs === "" || fs === "null" ? "no filesystem" : fs
+                var size = Model.bytes(modelData.bytes || 0)
+                var mount = modelData.mountpoint ? " (" + modelData.mountpoint + ")" : " (unmounted)"
+                return fsLabel + " · " + size + mount
+              }
+              color: modelData.mountpoint ? panel.dim : (modelData.fstype ? "#ffb800" : panel.dim)
               font.family: panel.fontFamily
               font.pixelSize: Style.font.caption
-              anchors.right: mountBtn.visible ? mountBtn.left : parent.right
+              anchors.right: mountInput.visible ? mountInput.left : (unmountBtn.visible ? unmountBtn.left : (mountBtn.visible ? mountBtn.left : parent.right))
               anchors.rightMargin: Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
+            }
+
+            TextField {
+              id: mountInput
+              visible: false
+              anchors.right: mountBtn.visible ? mountBtn.left : parent.right
+              anchors.rightMargin: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              width: Style.space(120)
+              height: Style.space(32)
+              placeholderText: "/mnt/data"
+              font.family: panel.fontFamily
+              font.pixelSize: Style.font.caption
+              verticalAlignment: TextInput.AlignVCenter
+              color: panel.foreground
+              background: Rectangle {
+                radius: Style.space(4)
+                color: panel.track
+                border.color: panel.foreground
+                border.width: 1
+              }
+              onAccepted: {
+                var path = mountInput.text.trim()
+                if (path === "") {
+                  panel.mountDevice("/dev/" + modelData.name)
+                } else if (path.indexOf("/") !== 0) {
+                  panel.mountErr = "Path must start with /"
+                  return
+                } else if (path === "/" || path === "/home" || path === "/root" || path === "/etc" || path === "/var" || path === "/usr" || path === "/bin" || path === "/sbin" || path === "/lib" || path === "/dev" || path === "/proc" || path === "/sys" || path === "/boot" || path === "/boot/efi" || path === "/efi" || path === "/efi/boot") {
+                  panel.mountErr = "Cannot mount at system path: " + path
+                  return
+                } else if (path.indexOf(" ") !== -1) {
+                  panel.mountErr = "Path cannot contain spaces"
+                  return
+                } else {
+                  // Check if path is already a mount point
+                  var disks = panel.disks || []
+                  for (var i = 0; i < disks.length; i++) {
+                    if (disks[i] && disks[i].mount === path) {
+                      panel.mountErr = "Already mounted at " + path
+                      return
+                    }
+                  }
+                  panel.mountDevice("/dev/" + modelData.name, path)
+                }
+                mountInput.visible = false
+                mountInput.text = ""
+              }
+              onVisibleChanged: if (visible) forceActiveFocus()
+            }
+
+            Button {
+              id: unmountBtn
+              anchors.right: mountBtn.visible ? mountBtn.left : parent.right
+              anchors.rightMargin: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              visible: !!modelData.mountpoint && modelData.mountpoint !== "/"
+              text: panel.mountBusy ? "…" : "UNMOUNT"
+              fontSize: Style.font.caption
+              foreground: "#ff6666"
+              fontFamily: panel.fontFamily
+              bordered: true
+              horizontalPadding: Style.space(8)
+              verticalPadding: Style.spacing.controlHeight * 0.14
+              onClicked: panel.unmountDevice("/dev/" + modelData.name)
             }
 
             Button {
@@ -305,8 +432,15 @@ Column {
               horizontalPadding: Style.space(8)
               verticalPadding: Style.spacing.controlPaddingY
               onClicked: {
-                driveCard.showAll = true
-                panel.mountDevice("/dev/" + modelData.name)
+                driveCard.showRawKids = true
+                if (mountInput.visible) {
+                  panel.mountDevice("/dev/" + modelData.name)
+                  mountInput.visible = false
+                  mountInput.text = ""
+                } else {
+                  mountInput.visible = true
+                  mountInput.forceActiveFocus()
+                }
               }
             }
           }
