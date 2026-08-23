@@ -36,6 +36,8 @@ Panel {
   readonly property string icon: "󰍛" // nf-md-memory (chip)
 
   function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+  // Threshold colors shared with the bar widget: calm until 60%, amber to 80%, red beyond.
+  function stateColor(pct) { return pct >= 80 ? "#ff3333" : pct >= 60 ? "#ffb800" : foreground }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 
   // ---- settings ------------------------------------------------------------
@@ -123,6 +125,23 @@ Panel {
   ]
   readonly property int currentTempBand: root.cpu && root.cpu.temp !== null && root.cpu.temp !== undefined ? tempBand(root.cpu.temp) : -1
 
+  property int smartIndex: -1
+  property string smartState: ""
+  property string smartOut: ""
+  property bool smartInstalled: false
+  property string smartDev: ""
+  // Expansion state keyed by partition path — survives delegate rebuilds
+  // caused by fresh snapshot arrays every tick.
+  property var expandedParts: ({})
+  function togglePart(key) {
+    var m = {}
+    for (var k in expandedParts) m[k] = expandedParts[k]
+    if (m[key]) delete m[key]
+    else m[key] = true
+    expandedParts = m
+  }
+  readonly property bool hasSmart: (root.snapshot && root.snapshot.has_smart === true) || root.smartInstalled
+
   readonly property string collectorPath: Qt.resolvedUrl("collector.py").toString().replace(/^file:\/\//, "")
 
   Process {
@@ -132,6 +151,78 @@ Panel {
     stdout: SplitParser {
       onRead: function(line) { root.ingest(line) }
     }
+  }
+
+  Process {
+    id: smartProc
+    property string buf: ""
+    stdout: StdioCollector { onStreamFinished: smartProc.buf = this.text }
+    onExited: {
+      if (root.smartState === "installing") {
+        if (this.exitCode === 0) { root.smartInstalled = true; root.smartState = "" }
+        else root.smartState = "error"
+        return
+      }
+      root.smartOut = smartProc.buf
+      root.smartState = smartProc.buf !== "" ? "done" : "error"
+    }
+  }
+
+  function querySmart(index) {
+    var d = root.disks[index]
+    if (!d || !d.smart_dev || !root.hasSmart) return
+    smartProc.buf = ""
+    smartOut = ""
+    smartIndex = index
+    smartDev = ""
+    smartState = "running"
+    smartProc.command = ["pkexec", "smartctl", "-H", "-A", "-l", "error", "/dev/" + d.smart_dev]
+    smartProc.running = true
+  }
+
+  function querySmartDev(name) {
+    if (!name || !root.hasSmart) return
+    smartProc.buf = ""
+    smartOut = ""
+    smartIndex = -1
+    smartDev = name
+    smartState = "running"
+    smartProc.command = ["pkexec", "smartctl", "-H", "-A", "-l", "error", "/dev/" + name]
+    smartProc.running = true
+  }
+
+  function installSmart() {
+    smartIndex = -1
+    smartState = "installing"
+    smartProc.buf = ""
+    smartProc.command = ["pkexec", "pacman", "-S", "--needed", "--noconfirm", "smartmontools"]
+    smartProc.running = true
+  }
+
+  function parseSmart(text) {
+    var rows = []
+    var verdict = null
+    var m = text.match(/overall-health[^:\n]*:\s*([A-Za-z ]+)/)
+    if (m) verdict = m[1].trim()
+    var wanted = ["Percentage Used", "Data Units Read", "Data Units Written", "Power On Hours", "Power Cycles", "Unsafe Shutdowns", "Media and Data Integrity Errors", "Critical Warning"]
+    var lines = text.split("\n")
+    for (var i = 0; i < lines.length; i++) {
+      var c = lines[i].indexOf(":")
+      if (c > 0 && c < 42) {
+        var k = lines[i].slice(0, c).trim()
+        for (var w = 0; w < wanted.length; w++) {
+          if (k === wanted[w]) { rows.push({ k: k, v: lines[i].slice(c + 1).trim() }); break }
+        }
+      }
+    }
+    if (rows.length === 0) {
+      var ids = { "5": "Reallocated sectors", "9": "Power-on hours", "194": "Temperature", "199": "CRC errors", "233": "Media wear" }
+      for (i = 0; i < lines.length; i++) {
+        var f = lines[i].trim().split(/\s+/)
+        if (f.length > 9 && ids[f[0]] !== undefined) rows.push({ k: ids[f[0]], v: f[f.length - 1] })
+      }
+    }
+    return { verdict: verdict, rows: rows, raw: text.trim().split("\n").slice(-14).join("\n") }
   }
 
   function ingest(line) {
@@ -199,13 +290,13 @@ Panel {
   IpcHandler {
     target: "io.github.arslan.sysmon"
 
-    function open(): void { root.openFromHotkey() }
-    function close(): void { root.close() }
-    function show(): void { root.openFromHotkey() }
-    function hide(): void { root.close() }
-    function toggle(): void { root.toggle() }
+    function open() { root.openFromHotkey() }
+    function close() { root.close() }
+    function show() { root.openFromHotkey() }
+    function hide() { root.close() }
+    function toggle() { root.toggle() }
     // omarchy-shell io.github.arslan.sysmon showTab proc  — opens on that tab.
-    function showTab(key: string): string {
+    function showTab(key) {
       var ok = root.showTab(key)
       if (ok && !root.opened) root.openFromHotkey()
       return ok ? "ok" : "unknown"
@@ -643,7 +734,7 @@ Panel {
         valueDim: true
       }
 
-      Meter { value: root.cpu ? root.cpu.total / 100 : 0 }
+      Meter { value: root.cpu ? root.cpu.total / 100 : 0; fillColor: root.stateColor(root.cpu ? root.cpu.total : 0) }
 
       Sparkline {
         width: parent.width
@@ -705,7 +796,7 @@ Panel {
                 height: parent.height
                 radius: parent.radius
                 width: parent.width * root.clamp(load / 100, 0, 1)
-                color: root.alpha(root.foreground, 0.7)
+                color: root.stateColor(load)
               }
             }
 
@@ -1017,121 +1108,315 @@ Panel {
     Column {
       spacing: Style.space(12)
 
+      PanelSectionHeader {
+        text: "DISKS"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+      }
+
       Text {
-        visible: root.hasData && root.disks.length === 0
-        text: "No mounted filesystems found"
+        visible: root.hasData && (root.snapshot.blockdevs ? root.snapshot.blockdevs.length : 0) === 0 && root.disks.length === 0
+        text: "No disks detected"
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
       }
 
       Repeater {
-        model: root.disks
+        model: root.snapshot && root.snapshot.blockdevs ? root.snapshot.blockdevs : []
 
-        Column {
+        delegate: Column {
+          id: driveCard
           required property var modelData
           required property int index
           width: parent.width
-          spacing: Style.space(6)
+          spacing: Style.space(8)
 
-          readonly property real fraction: modelData.total > 0 ? modelData.used / modelData.total : 0
-          readonly property bool hasIo: modelData.read_bps !== null && modelData.read_bps !== undefined
+          property bool expanded: false
+          readonly property var partitions: {
+            var name = modelData.name
+            var out = []
+            for (var i = 0; i < root.disks.length; i++) {
+              var d = root.disks[i]
+              if (!d || !d.source) continue
+              if (d.smart_dev === name
+                  || d.source === "/dev/" + name
+                  || d.source.indexOf("/dev/" + name + "p") === 0
+                  || d.source.indexOf("/dev/" + name + "/") === 0) {
+                out.push(d)
+              }
+            }
+            return out
+          }
+          readonly property bool activeSmart: root.smartDev === modelData.name
 
           PanelSeparator { visible: index > 0; foreground: root.foreground }
 
-          Item {
-            width: parent.width
-            implicitHeight: Math.max(diskName.implicitHeight, diskPct.implicitHeight)
-
-            Row {
-              id: diskName
-              anchors.left: parent.left
-              anchors.right: diskPct.left
-              anchors.rightMargin: Style.space(10)
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(8)
-
-              Text {
-                text: Model.mountLabel(modelData.mount)
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                anchors.verticalCenter: parent.verticalCenter
-              }
-              Text {
-                text: Model.fsLabel(modelData)
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                anchors.verticalCenter: parent.verticalCenter
-                elide: Text.ElideRight
-              }
-            }
-
-            Text {
-              id: diskPct
-              text: Model.percent(fraction * 100)
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              font.bold: true
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-            }
+          DriveHeading {
+            glyphText: modelData.transport === "usb" ? "\uF08EB" : modelData.transport === "nvme" ? "\uF01A0" : "\uF02CA"
+            accent: modelData.removable ? "#ffb800" : root.dim
+            title: modelData.model || modelData.name
+            meta: Model.bytes(modelData.bytes) + " · " + modelData.transport + (modelData.removable ? " · removable" : "")
           }
 
-          Meter { value: fraction }
-
-          Item {
+          Column {
             width: parent.width
-            implicitHeight: Math.max(diskUsage.implicitHeight, diskIo.implicitHeight)
+            spacing: Style.space(6)
+            visible: driveCard.partitions.length > 0
 
             Text {
-              id: diskUsage
-              text: Model.bytes(modelData.used) + " used  ·  " + Model.bytes(modelData.free) + " free of " + Model.bytes(modelData.total)
-              color: root.dim
+              text: "PARTITIONS"
+              color: root.faint
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
-              anchors.left: parent.left
-              anchors.right: diskIo.left
-              anchors.rightMargin: Style.space(10)
-              anchors.verticalCenter: parent.verticalCenter
-              elide: Text.ElideRight
+              font.bold: true
+              font.letterSpacing: 1
             }
 
-            Text {
-              id: diskIo
-              visible: hasIo
-              text: hasIo ? "read " + Model.rate(modelData.read_bps) + "   ·   write " + Model.rate(modelData.write_bps) : ""
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
+            Repeater {
+              model: driveCard.partitions
+
+              delegate: Column {
+                id: partRow
+
+                required property var modelData
+                width: parent.width
+                spacing: Style.space(4)
+
+                readonly property string partKey: String(modelData.source || "") || String(modelData.mount || "") || String(modelData.label || "")
+                readonly property bool isOpen: !!root.expandedParts[partKey]
+                readonly property real fraction: modelData.total > 0 ? modelData.used / modelData.total : 0
+
+                Item {
+                  width: parent.width
+                  implicitHeight: Math.max(partName.implicitHeight, partMeta.implicitHeight)
+
+                  MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.togglePart(partRow.partKey)
+                  }
+
+                  Text {
+                    id: partName
+                    text: modelData.mount ? Model.mountLabel(modelData.mount) : (String(modelData.source || "").indexOf("/dev/mapper/") === 0 ? "crypt" : (String(modelData.source || "").indexOf("/dev/") === 0 ? String(modelData.source).substring(5) : "disk"))
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+
+                  Text {
+                    id: partMeta
+                    text: modelData.fstype || "filesystem"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    anchors.left: partName.right
+                    anchors.leftMargin: Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+
+                  Text {
+                    id: usageMeta
+                    text: partRow.modelData.total > 0 ? Model.bytes(partRow.modelData.used) + " / " + Model.bytes(partRow.modelData.total) + " · " + Model.percent(partRow.fraction * 100) : "—"
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                    anchors.right: chevron.left
+                    anchors.rightMargin: Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+
+                  Text {
+                    visible: !!partRow.modelData.mount
+                    text: "(" + (partRow.modelData.mount || "") + ")"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    anchors.right: usageMeta.left
+                    anchors.rightMargin: Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+
+                  Text {
+                    id: chevron
+                    text: partRow.isOpen ? "▾" : "›"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                }
+
+                Meter {
+                  visible: partRow.modelData.total > 0
+                  value: partRow.fraction
+                }
+
+                Text {
+                  // Always occupies one line so rows don't shift when IO goes idle
+                  text: {
+                    var r = partRow.modelData.read_bps
+                    var w = partRow.modelData.write_bps
+                    var hR = r !== null && r !== undefined && r > 0
+                    var hW = w !== null && w !== undefined && w > 0
+                    if (hR && hW) return "read " + Model.rate(r) + "  ·  write " + Model.rate(w)
+                    if (hR) return "read " + Model.rate(r)
+                    if (hW) return "write " + Model.rate(w)
+                    return " "
+                  }
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+
+                Column {
+                  visible: partRow.isOpen
+                  width: parent.width
+                  spacing: Style.space(4)
+
+                  SectionRow {
+                    visible: !!partRow.modelData.source
+                    label: "Device"
+                    value: String(partRow.modelData.source || "")
+                    valueDim: true
+                  }
+                }
+              }
             }
           }
 
           Text {
-            visible: modelData.mounts && modelData.mounts.length > 0
-            width: parent.width
-            text: modelData.mounts && modelData.mounts.length > 0 ? "also " + modelData.mounts.join(", ") : ""
+            visible: driveCard.partitions.length === 0
+            text: "NO PARTITIONS"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
-            elide: Text.ElideRight
+          }
+
+          Row {
+            spacing: Style.space(10)
+
+            Button {
+              text: driveCard.activeSmart && root.smartState === "running" ? "Checking\u2026" : "SMART"
+              fontSize: Style.font.caption
+              foreground: driveCard.activeSmart ? root.foreground : root.dim
+              fontFamily: root.fontFamily
+              bordered: true
+              horizontalPadding: Style.space(8)
+              verticalPadding: Style.spacing.controlPaddingY
+              onClicked: {
+                if (driveCard.activeSmart) { root.smartDev = ""; root.smartState = "" }
+                else root.querySmartDev(modelData.name)
+              }
+            }
+
+            Text {
+              visible: !root.hasSmart
+              anchors.verticalCenter: parent.verticalCenter
+              text: "requires smartmontools"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Button {
+              visible: !root.hasSmart
+              text: "Install"
+              fontSize: Style.font.caption
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              bordered: true
+              horizontalPadding: Style.space(8)
+              verticalPadding: Style.spacing.controlPaddingY
+              onClicked: root.installSmart()
+            }
+          }
+
+          Text {
+            visible: driveCard.activeSmart && root.smartState === "running"
+            width: parent.width
+            text: "Waiting for authorization\u2026"
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Text {
+            visible: driveCard.activeSmart && root.smartState === "error"
+            width: parent.width
+            text: "Could not read SMART data (cancelled or unsupported device)"
+            color: "#ff9933"
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Column {
+            readonly property var report: driveCard.activeSmart && root.smartState === "done" && root.smartOut !== "" ? root.parseSmart(root.smartOut) : null
+            visible: report !== null
+            width: parent.width
+            spacing: Style.space(6)
+
+            Text {
+              visible: parent.report && parent.report.verdict !== null
+              width: parent.width
+              text: {
+                if (!parent.report || parent.report.verdict === null) return ""
+                var extra = ""
+                var mm = root.smartOut.match(/Percentage Used:\s*(\d+)%/)
+                if (mm) extra = "  ·  ≈ " + Math.max(0, 100 - parseInt(mm[1])) + "% life left"
+                return "Health: " + parent.report.verdict + extra
+              }
+              color: parent.report && String(parent.report.verdict).indexOf("PASSED") >= 0 ? "#66ff66" : "#ff3333"
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+
+            Repeater {
+              model: parent.report ? parent.report.rows : []
+
+              delegate: Row {
+                required property int index
+                required property var modelData
+                width: parent.width
+                spacing: Style.space(8)
+
+                Text {
+                  width: parent.width * 0.55
+                  text: modelData.k
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  text: modelData.v
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  elide: Text.ElideRight
+                }
+              }
+            }
+
+            Text {
+              visible: parent.report && parent.report.rows.length === 0
+              width: parent.width
+              text: parent.report ? parent.report.raw : ""
+              color: root.dim
+              opacity: 0.8
+              wrapMode: Text.WrapAnywhere
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
           }
         }
-      }
-
-      PanelSeparator {
-        visible: root.snapshot && root.snapshot.nvme_temp !== null && root.snapshot.nvme_temp !== undefined
-        foreground: root.foreground
-      }
-
-      InfoPair {
-        visible: root.snapshot && root.snapshot.nvme_temp !== null && root.snapshot.nvme_temp !== undefined
-        label: "Drive temperature"
-        value: root.snapshot ? Model.temp(root.snapshot.nvme_temp) : "—"
       }
     }
   }
@@ -1317,11 +1602,16 @@ Panel {
 
           SectionRow {
             label: modelData.name
-            value: hasBusy ? Model.percent(modelData.busy) : ""
+            value: {
+              var bits = []
+              if (hasBusy) bits.push(Model.percent(modelData.busy))
+              if (modelData.temp !== null && modelData.temp !== undefined) bits.push(Model.temp(modelData.temp))
+              return bits.join("  ·  ")
+            }
             valueDim: false
           }
 
-          Meter { visible: hasBusy; value: hasBusy ? modelData.busy / 100 : 0 }
+          Meter { visible: hasBusy; value: hasBusy ? modelData.busy / 100 : 0; fillColor: root.stateColor(hasBusy ? modelData.busy : 0) }
 
           Sparkline {
             visible: index === 0 && hasBusy
@@ -1618,6 +1908,53 @@ Panel {
     bordered: true
   }
 
+  // Transport glyph + name on the left, dim metadata flush right
+  // (same anchored layout idiom as SectionRow).
+  component DriveHeading: Item {
+    property string glyphText: ""
+    property string title: ""
+    property real titleSize: Style.font.caption
+    property string meta: ""
+    property color accent: root.dim
+
+    width: parent ? parent.width : implicitWidth
+    implicitHeight: Math.max(headingGlyph.implicitHeight, headingName.implicitHeight)
+
+    Text {
+      id: headingGlyph
+      text: glyphText
+      color: accent
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption + 2
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+    }
+
+    Text {
+      id: headingName
+      text: title
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: titleSize
+      elide: Text.ElideRight
+      anchors.left: headingGlyph.right
+      anchors.leftMargin: Style.space(8)
+      anchors.right: headingMeta.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+    }
+
+    Text {
+      id: headingMeta
+      text: meta
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+    }
+  }
+
   // Label on the left, value on the right; the value optionally dimmed.
   component SectionRow: Item {
     property string label: ""
@@ -1659,6 +1996,7 @@ Panel {
   component Meter: Item {
     id: meter
     property real value: 0
+    property color fillColor: root.foreground
     property real thickness: Math.max(Style.space(4), Math.round(Style.spacing.controlHeight * 0.14))
 
     width: parent ? parent.width : implicitWidth
@@ -1677,7 +2015,7 @@ Panel {
       height: meterTrack.height
       radius: meterTrack.radius
       width: meterTrack.width * root.clamp(meter.value, 0, 1)
-      color: root.foreground
+      color: meter.fillColor
     }
   }
 
