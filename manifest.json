@@ -5,7 +5,7 @@
   "version": "2.0.0",
   "author": "arslan",
   "license": "MIT",
-  "description": "Four bar metrics and a keyboard-friendly system monitor panel. Based on omarchy-vitals with expanded disk, process, temp, and GPU tooling.",
+  "description": "Four bar metrics and a keyboard-friendly system monitor panel. Inspired by omarchy-vitals, with expanded disk, process, temp, and GPU tooling.",
   "kinds": [
     "bar-widget"
   ],

@@ -2,7 +2,7 @@
 
 A lightweight system monitor for the Omarchy desktop shell. It shows four live glance metrics in the bar and opens a richer tabbed dashboard for CPU, temperature, memory, disk, network, GPU, and processes.
 
-Forked and heavily extended from [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) by Woogy7.
+Inspired by [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) by Woogy7, with substantial original work on top.
 
 ## Features
 
@@ -151,7 +151,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Credits
 
-SysMon started from [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) (MIT, Woogy7). That plugin provided the original bar-widget + panel collector idea and btop-style tab layout.
+SysMon is inspired by [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) (MIT, Woogy7), which pioneered the bar-widget + panel collector pattern and btop-style tab layout for Omarchy.
 
 On top of that baseline, this repo adds and changes:
 
