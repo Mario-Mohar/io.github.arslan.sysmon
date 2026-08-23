@@ -17,10 +17,10 @@ See all screenshots at [screenshots/README.md](screenshots/README.md).
 omarchy plugin add io.github.arslan.sysmon --enable
 ```
 
-Or from git once published:
+From GitHub URL (as tested):
 
 ```bash
-omarchy plugin add https://github.com/<your-user>/io.github.arslan.sysmon --enable
+omarchy plugin add https://github.com/ch-arslanahmad/io.github.arslan.sysmon --enable
 ```
 
 Then place it on the bar with `omarchy bar move` if needed (defaults to the right section).
@@ -28,8 +28,11 @@ Then place it on the bar with `omarchy bar move` if needed (defaults to the righ
 ## Remove
 
 ```bash
-omarchy plugin remove io.github.arslan.sysmon
+omarchy plugin remove io.github.arslan.sysmon --yes
 ```
+
+> `omarchy plugin remove` expects a plugin ID, not a repo URL.  
+> This will fail: `omarchy plugin remove https://github.com/ch-arslanahmad/io.github.arslan.sysmon`
 
 ## Requirements
 
