@@ -1,6 +1,8 @@
 # SysMon for Omarchy
 
-A lightweight system monitor for the Omarchy desktop shell. It shows four live glance metrics in the bar and opens a richer 7-tab dashboard for CPU, temperature, memory, disk, network, GPU, and processes.
+A lightweight system monitor for the Omarchy desktop shell. It shows four live glance metrics in the bar and opens a richer tabbed dashboard for CPU, temperature, memory, disk, network, GPU, and processes.
+
+Forked and heavily extended from [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) by Woogy7.
 
 ## Features
 
@@ -59,6 +61,18 @@ See [features.md](features.md) for planned work.
 
 ```bash
 omarchy plugin add io.github.arslan.sysmon --enable
+```
+
+Or from a git URL once published:
+
+```bash
+omarchy plugin add https://github.com/<your-user>/io.github.arslan.sysmon --enable
+```
+
+## Remove
+
+```bash
+omarchy plugin remove io.github.arslan.sysmon
 ```
 
 ## Configure
@@ -133,4 +147,17 @@ qmllint Panel.qml SysMon.qml SysMonCore.qml MemRing.qml tabs/*.qml components/*.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+## Credits
+
+SysMon started from [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) (MIT, Woogy7). That plugin provided the original bar-widget + panel collector idea and btop-style tab layout.
+
+On top of that baseline, this repo adds and changes:
+
+- Overview-first panel navigation with drill-down sub-pages
+- Dedicated Temp tab (core temps, fans, device links)
+- Physical drive tree with removable/USB detection, mount/unmount, and SMART tooling
+- Process tab with sort, filter, keyboard cursor, detail cards, and signal actions
+- Lazy tab loading, reusable `tabs/` + `components/` architecture, and `MemRing.qml`
+- Bar/panel sync, sparkline histories, GPU vendor queries (`nvidia-smi`), and keyboard/IPC hotkeys

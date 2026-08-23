@@ -5,7 +5,7 @@
   "version": "2.0.0",
   "author": "arslan",
   "license": "MIT",
-  "description": "Colored CPU/MEM/TEMP/DISK bar metrics with a full tabbed system monitor panel (based on omarchy-vitals).",
+  "description": "Four bar metrics and a keyboard-friendly system monitor panel. Based on omarchy-vitals with expanded disk, process, temp, and GPU tooling.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "SysMon",
-    "description": "4 colored metrics in the bar; click any for a tabbed btop-style monitor.",
+    "description": "CPU, memory, temperature, and disk pills; click for a full system monitor panel.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",
