@@ -3,7 +3,7 @@
 Four calm metrics in the bar. One keyboard-friendly dashboard for everything else.
 
 ![SysMon bar](screenshots/SysMon-bar.png)
-![SysMon overview panel](screenshots/SysMon-overview-panel.png)
+![SysMon overview panel](preview.png)
 
 A lightweight system monitor for the Omarchy desktop shell — CPU, temperature, memory, disk, network, GPU, and processes.
 
@@ -30,16 +30,6 @@ Then place it on the bar with `omarchy bar move` if needed (defaults to the righ
 ```bash
 omarchy plugin remove io.github.arslan.sysmon
 ```
-
-## Configure
-
-`omarchy bar` → SysMon widget settings:
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `refreshSeconds` | `1` | Panel collector sample interval, 1–10 s (clamped in `Panel.qml`) |
-
-Only affects `collector.py` while the panel is open. The bar sampler in `SysMonCore.qml` is fixed at 2 seconds and is not configurable.
 
 ## Requirements
 
@@ -92,50 +82,32 @@ Only affects `collector.py` while the panel is open. The bar sampler in `SysMonC
 
 ### Process sub-page
 
-- Sortable, filterable process table with keyboard cursor navigation
+- Sortable, filterable process list with keyboard navigation and action controls
 - Detail cards, terminate/kill confirmation, and pause/resume signal actions
 - Reached from Overview → Top Processes or View all
 
 ### Navigation and integration
 
-- Arrow keys and number keys (`1`–`6`): switch main tabs (Overview, CPU, Temps, Memory, Disks, GPU)
-- Bar pills open CPU, Memory, Temps, or Disks directly
-- Escape unwinds process detail → filter → sub-page back → panel close
-- IPC `showTab(key)` accepts `overview`, `cpu`, `temp`, `mem`, `disk`, `gpu` (see table below)
-- Temperature bands, fan rows, and clickable GPU/NVMe device links in the Temp tab
+- Arrow keys and number keys switch the main tabs; the GPU tab appears only when a compatible GPU is detected
+- Bar pills jump straight to CPU, memory, temperature, or disk views
+- Escape steps back from process detail → filter → sub-page → panel close
+- IPC `showTab(key)` accepts `overview`, `cpu`, `temp`, `mem`, `disk`, and `gpu`
+- Temperature bands, fan rows, and clickable GPU/NVMe device links live in the Temp tab
 
 ## Tabs
 
-| View | Key / access | Highlights |
-| --- | --- | --- |
-| Overview | `overview` (default) | System health, load, resource glance cards, top processes |
-| CPU | `cpu` | Total/core usage, model/frequency/load details, usage history |
-| Temps | `temp` | Core temps, thermal bands, fan/device rows, GPU/NVMe links |
-| Memory | `mem` | Memory ring, used/free/cache/swap breakdown |
-| Disks | `disk` | Drives, partitions, mounts, SMART, mount/unmount actions |
-| GPU | `gpu` | GPU presence, activity, memory/temp where available |
-| Network | Overview → Network | Interface rates, RX/TX history, addresses/stat counters |
-| Processes | Overview → Top Processes | Sortable/filterable process table with signal actions |
+| View      | Key / access             | Highlights                                                    |
+| --------- | ------------------------ | ------------------------------------------------------------- |
+| Overview  | `overview` (default)     | System health, load, resource glance cards, top processes     |
+| CPU       | `cpu`                    | Total/core usage, model/frequency/load details, usage history |
+| Temps     | `temp`                   | Core temps, thermal bands, fan/device rows, GPU/NVMe links    |
+| Memory    | `mem`                    | Memory ring, used/free/cache/swap breakdown                   |
+| Disks     | `disk`                   | Drives, partitions, mounts, SMART, mount/unmount actions      |
+| GPU       | `gpu`                    | GPU presence, activity, memory/temp where available           |
+| Network   | Overview → Network       | Interface rates, RX/TX history, addresses, and counters       |
+| Processes | Overview → Top Processes | Sortable/filterable process table with signal actions         |
 
-## Hotkeys and Keyboard Navigation
-
-| Key | Action |
-| --- | --- |
-| Left/Right | Switch main dashboard tabs |
-| Number keys `1`–`6` | Jump to Overview, CPU, Temps, Memory, Disks, GPU |
-| Up/Down | Scroll current tab, or move process cursor on Process sub-page |
-| Enter | Activate highlighted process row detail |
-| Delete | Request terminate for highlighted process |
-| Escape | Close process detail, clear filter, go back from sub-page, or close panel |
-| `s` / `S` on Process sub-page | Cycle sort column forward/back |
-| `r` on Process sub-page | Reverse sort direction |
-| `/` or `f` on Process sub-page | Focus process filter |
-| `g` / `G` on Process sub-page | Jump to top/bottom |
-| `SUPER CTRL V` | Open CPU tab |
-| `SUPER CTRL B` | Open Memory tab |
-| `SUPER CTRL T` | Open Temps tab |
-| `SUPER CTRL D` | Open Disks tab |
-| `SUPER CTRL G` | Open GPU tab |
+Network and Processes are sub-pages from Overview rather than standalone main tabs.
 
 ## Architecture
 
@@ -146,17 +118,6 @@ Only affects `collector.py` while the panel is open. The bar sampler in `SysMonC
 - `Panel.qml` stores the latest snapshot, updates history arrays, and exposes data/action helpers to the active tab or sub-page.
 - Overview UI lives inline in `Panel.qml`; dedicated tab bodies live in `tabs/*.qml`.
 - `components/*.qml` contain reusable rows, meters, sparklines, action pills, headers, and shared layout helpers.
-
-## Debugging
-
-```bash
-journalctl --user --since '10 min ago' | grep -iE 'qml|sysmon|io.github.arslan.sysmon'
-
-cd ~/.config/omarchy/plugins/io.github.arslan.sysmon
-timeout 4 python3 collector.py --interval 1 | head -n 1 | python3 -m json.tool
-
-qmllint Panel.qml SysMon.qml SysMonCore.qml MemRing.qml tabs/*.qml components/*.qml
-```
 
 ## License
 
