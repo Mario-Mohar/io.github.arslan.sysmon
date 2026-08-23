@@ -1,8 +1,18 @@
 # SysMon for Omarchy
 
-A lightweight system monitor for the Omarchy desktop shell. It shows four live glance metrics in the bar and opens a richer tabbed dashboard for CPU, temperature, memory, disk, network, GPU, and processes.
+Four calm metrics in the bar. One keyboard-friendly dashboard for everything else.
+
+A lightweight system monitor for the Omarchy desktop shell — CPU, temperature, memory, disk, network, GPU, and processes.
 
 Inspired by [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) by Woogy7, with substantial original work on top.
+
+## Screenshots
+
+![Bar pills](screenshots/SysMon-bar.png)
+
+![Overview panel](screenshots/SysMon-overview-panel.png)
+
+Full gallery (CPU, Temps, Memory, Disks, SMART, GPU, Network, Processes): [screenshots/README.md](screenshots/README.md)
 
 ## Features
 
