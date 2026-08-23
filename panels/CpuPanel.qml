@@ -1,150 +1,117 @@
 import QtQuick
-import Quickshell.Io
-import qs.Commons
 import qs.Ui
-import "../format.js" as Fmt
+import qs.Commons
 
-// CPU detail panel — cores, frequency, load average, usage sparkline.
 Panel {
   id: root
   moduleName: "io.github.arslan.sysmon.cpu"
-  ipcTarget: "io.github.arslan.sysmon.cpu"
 
+  property var sys: null
   property var anchorItem: null
   property var hostWidget: null
-  property bool openedFromHotkey: false
-  readonly property string icon: "\uf4bc"
-  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property color foreground: bar ? bar.barForeground : Color.foreground
-  readonly property color dim: Qt.darker(foreground, 1.55)
-  readonly property color faint: Qt.darker(foreground, 1.4)
 
-  // Reference to core data — walk up to the bar widget
-  readonly property var coreData: hostWidget ? hostWidget.sys : null
-
-  function open() { openedFromHotkey = false; root.controller.show() }
-  function openFromHotkey() { openedFromHotkey = true; root.controller.show() }
-  function close() { root.controller.hide() }
-  function toggle() { root.opened ? close() : openFromHotkey() }
-
-  onOpenedChanged: {
-    if (opened) Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+  function stateColor(val) {
+    if (val >= 80) return "#ff3333"
+    if (val >= 60) return "#ffb800"
+    return "#4da6ff"
   }
 
-  PanelKeyCatcher {
-    id: keyCatcher
-    anchors.fill: parent
-    Keys.onLeftPressed: root.switchPanel(-1)
-    Keys.onRightPressed: root.switchPanel(1)
-    Keys.onEscapePressed: root.close()
+  KeyboardPanel {
+    id: panel
+    anchorItem: root.anchorItem
+    owner: root.hostWidget || root
+    bar: root.bar
+    open: root.opened
+    contentWidth: Style.space(300)
+    contentHeight: column.implicitHeight + Style.space(32)
 
     Column {
-      anchors.fill: parent
-      anchors.margins: Style.space(16)
-      spacing: Style.space(12)
+      id: column
+      width: parent.width
+      spacing: 10
 
-      PanelHero {
-        width: parent.width
-        title: coreData ? Fmt.mhz(coreData.cpuFreqMhz) : "—"
-        meta: "CPU FREQUENCY"
-        detail: coreData ? Math.round(coreData.cpuPercent) + "%" : ""
-        iconComponent: Text {
-          text: root.icon
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.display
-        }
+      // Header
+      Row {
+        spacing: 8
+        Text { text: "\u{F035B}"; font.family: Style.font.family; font.pixelSize: Style.font.title; color: "#4da6ff" }
+        Text { text: "CPU"; font.family: Style.font.family; font.pixelSize: Style.font.title; color: Color.foreground; anchors.verticalCenter: parent.verticalCenter }
       }
 
-      PanelSeparator { width: parent.width; foreground: root.foreground }
+      PanelSeparator {}
 
-      // ── Load Average ──────────────────────────────────────────────
-      PanelSectionHeader {
-        text: "LOAD AVERAGE"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
+      Row {
+        width: parent.width
+        Text { text: "Frequency"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.muted; width: 90 }
+        Text { text: sys ? sys.cpuFreqGhz + " GHz" : "-"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.foreground }
       }
 
       Row {
         width: parent.width
-        spacing: Style.space(12)
+        Text { text: "Load"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.muted; width: 90 }
+        Text { text: sys && sys.loadAvg ? sys.loadAvg[0].toFixed(2) + "  " + sys.loadAvg[1].toFixed(2) + "  " + sys.loadAvg[2].toFixed(2) : "-"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.foreground }
+      }
 
-        Repeater {
-          model: coreData ? coreData.loadAvg : [0, 0, 0]
-          delegate: Row {
-            spacing: Style.space(4)
-            Text {
-              text: ["1m", "5m", "15m"][index] || ""
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-            Text {
-              text: Number(modelData).toFixed(2)
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              font.bold: true
-            }
+      Row {
+        width: parent.width
+        spacing: 8
+        Text { text: "Usage"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.muted; width: 82; anchors.verticalCenter: parent.verticalCenter }
+        Rectangle {
+          width: parent.width - 140
+          height: 14
+          radius: 7
+          color: Qt.darker(Color.foreground, 1.6)
+          anchors.verticalCenter: parent.verticalCenter
+          Rectangle {
+            width: parent.width * (sys ? sys.cpuPercent / 100 : 0)
+            height: parent.height
+            radius: 7
+            color: stateColor(sys ? sys.cpuPercent : 0)
+            Behavior on width { NumberAnimation { duration: 250 } }
           }
         }
+        Text { text: sys ? Math.round(sys.cpuPercent) + "%" : "-"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.foreground; anchors.verticalCenter: parent.verticalCenter }
       }
 
-      PanelSeparator { width: parent.width; foreground: root.foreground }
-
-      // ── Per-core usage ──────────────────────────────────────────
-      PanelSectionHeader {
-        text: "CORES"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-      }
+      PanelSeparator {}
 
       Repeater {
-        model: coreData ? coreData.corePercents : []
-        delegate: Row {
+        model: sys ? sys.corePercents.length : 0
+        Row {
           width: parent.width
-          spacing: Style.space(8)
-
+          spacing: 8
+          required property int index
           Text {
-            width: Style.space(40)
             text: "Core " + index
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
-
-          Item {
-            width: parent.width - Style.space(80)
-            height: Style.space(14)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            color: Color.muted
+            width: 60
             anchors.verticalCenter: parent.verticalCenter
-
+          }
+          Rectangle {
+            width: parent.width - 130
+            height: 10
+            radius: 5
+            color: Qt.darker(Color.foreground, 1.6)
+            anchors.verticalCenter: parent.verticalCenter
             Rectangle {
-              anchors.fill: parent
-              color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
-              radius: Style.space(4)
-            }
-
-            Rectangle {
-              width: Math.max(2, parent.width * modelData / 100)
+              width: parent.width * ((sys && sys.corePercents[parent.parent.index]) ? sys.corePercents[parent.parent.index] / 100 : 0)
               height: parent.height
-              color: modelData >= 90 ? Color.urgent : Color.accent
-              radius: Style.space(4)
+              radius: 5
+              color: stateColor(sys && sys.corePercents[parent.parent.index] ? sys.corePercents[parent.parent.index] : 0)
+              Behavior on width { NumberAnimation { duration: 250 } }
             }
           }
-
           Text {
-            width: Style.space(32)
-            text: modelData + "%"
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            font.bold: true
-            horizontalAlignment: Text.AlignRight
+            text: (sys && sys.corePercents[index] !== undefined ? Math.round(sys.corePercents[index]) : 0) + "%"
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            color: Color.foreground
+            width: 36
+            anchors.verticalCenter: parent.verticalCenter
           }
         }
       }
-
-      Item { height: 1; width: 1 } // spacer
     }
   }
 }

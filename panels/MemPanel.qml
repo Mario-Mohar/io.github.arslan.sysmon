@@ -1,158 +1,110 @@
 import QtQuick
-import Quickshell.Io
-import qs.Commons
 import qs.Ui
-import "../format.js" as Fmt
+import qs.Commons
 
-// Memory detail panel — used/free/cached/swap with usage bars.
 Panel {
   id: root
   moduleName: "io.github.arslan.sysmon.mem"
-  ipcTarget: "io.github.arslan.sysmon.mem"
 
+  property var sys: null
   property var anchorItem: null
   property var hostWidget: null
-  property bool openedFromHotkey: false
-  readonly property string icon: "\udb81\ude1a"
-  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property color foreground: bar ? bar.barForeground : Color.foreground
-  readonly property color dim: Qt.darker(foreground, 1.55)
 
-  readonly property var coreData: hostWidget ? hostWidget.sys : null
-
-  function open() { openedFromHotkey = false; root.controller.show() }
-  function openFromHotkey() { openedFromHotkey = true; root.controller.show() }
-  function close() { root.controller.hide() }
-  function toggle() { root.opened ? close() : openFromHotkey() }
-
-  onOpenedChanged: {
-    if (opened) Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+  function stateColor(val) {
+    if (val >= 80) return "#ff3333"
+    if (val >= 60) return "#ffb800"
+    return "#66ff66"
   }
 
-  PanelKeyCatcher {
-    id: keyCatcher
-    anchors.fill: parent
-    Keys.onLeftPressed: root.switchPanel(-1)
-    Keys.onRightPressed: root.switchPanel(1)
-    Keys.onEscapePressed: root.close()
+  function fmtBytes(b) {
+    if (!b || b <= 0) return "-"
+    if (b >= 1073741824) return (b / 1073741824).toFixed(1) + " GB"
+    if (b >= 1048576) return (b / 1048576).toFixed(0) + " MB"
+    return (b / 1024).toFixed(0) + " KB"
+  }
+
+  KeyboardPanel {
+    id: panel
+    anchorItem: root.anchorItem
+    owner: root.hostWidget || root
+    bar: root.bar
+    open: root.opened
+    contentWidth: Style.space(300)
+    contentHeight: column.implicitHeight + Style.space(32)
 
     Column {
-      anchors.fill: parent
-      anchors.margins: Style.space(16)
-      spacing: Style.space(12)
+      id: column
+      width: parent.width
+      spacing: 10
 
-      PanelHero {
-        width: parent.width
-        title: coreData ? Math.round(coreData.memPercent) + "%" : "—"
-        meta: "MEMORY"
-        detail: coreData ? Fmt.bytes(coreData.memUsed) + " / " + Fmt.bytes(coreData.memTotal) : ""
-        iconComponent: Text {
-          text: root.icon
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.display
-        }
+      Row {
+        spacing: 8
+        Text { text: "\u{F046D}"; font.family: Style.font.family; font.pixelSize: Style.font.title; color: "#66ff66" }
+        Text { text: "Memory"; font.family: Style.font.family; font.pixelSize: Style.font.title; color: Color.foreground; anchors.verticalCenter: parent.verticalCenter }
       }
 
-      PanelSeparator { width: parent.width; foreground: root.foreground }
-
-      // ── Memory breakdown ────────────────────────────────────────
-      PanelSectionHeader {
-        text: "BREAKDOWN"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-      }
-
-      Repeater {
-        model: coreData ? [
-          { label: "Used", value: coreData.memUsed, color: Color.accent },
-          { label: "Free", value: coreData.memFree, color: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.15) },
-          { label: "Buffers", value: coreData.memBuffers, color: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.25) },
-          { label: "Cached", value: coreData.memCached, color: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.35) }
-        ] : []
-        delegate: Column {
-          width: parent.width
-          spacing: Style.space(4)
-
-          Row {
-            width: parent.width
-            Text {
-              width: parent.width * 0.4
-              text: modelData.label
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-            Text {
-              width: parent.width * 0.35
-              text: Fmt.bytes(modelData.value)
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              font.bold: true
-            }
-            Text {
-              width: parent.width * 0.25
-              text: coreData.memTotal > 0 ? Math.round(modelData.value / coreData.memTotal * 100) + "%" : "0%"
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              horizontalAlignment: Text.AlignRight
-            }
-          }
-
-          // Usage bar
-          Item {
-            width: parent.width
-            height: Style.space(8)
-
-            Rectangle {
-              anchors.fill: parent
-              color: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.08)
-              radius: Style.space(4)
-            }
-
-            Rectangle {
-              width: coreData && coreData.memTotal > 0
-                ? Math.max(2, parent.width * modelData.value / coreData.memTotal) : 0
-              height: parent.height
-              color: modelData.color
-              radius: Style.space(4)
-            }
-          }
-        }
-      }
-
-      PanelSeparator { width: parent.width; foreground: root.foreground }
-
-      // ── Swap ────────────────────────────────────────────────────
-      PanelSectionHeader {
-        text: "SWAP"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        visible: coreData && coreData.swapTotal > 0
-      }
+      PanelSeparator {}
 
       Row {
         width: parent.width
-        visible: coreData && coreData.swapTotal > 0
-        spacing: Style.space(12)
-
-        Text {
-          text: Fmt.bytes(coreData ? coreData.swapUsed : 0) + " / " + Fmt.bytes(coreData ? coreData.swapTotal : 0)
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
+        spacing: 8
+        Text { text: "RAM"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.muted; width: 82; anchors.verticalCenter: parent.verticalCenter }
+        Rectangle {
+          width: parent.width - 140
+          height: 14
+          radius: 7
+          color: Qt.darker(Color.foreground, 1.6)
+          anchors.verticalCenter: parent.verticalCenter
+          Rectangle {
+            width: parent.width * (sys ? sys.memPercent / 100 : 0)
+            height: parent.height
+            radius: 7
+            color: stateColor(sys ? sys.memPercent : 0)
+            Behavior on width { NumberAnimation { duration: 250 } }
+          }
         }
-        Text {
-          text: coreData ? Math.round(coreData.swapPercent) + "%" : "0%"
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+        Text { text: sys ? Math.round(sys.memPercent) + "%" : "-"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.foreground; anchors.verticalCenter: parent.verticalCenter }
+      }
+
+      PanelSeparator {}
+
+      Repeater {
+        model: [
+          { label: "Total", value: fmtBytes(sys ? sys.memTotal : 0) },
+          { label: "Used", value: fmtBytes(sys ? sys.memUsed : 0) },
+          { label: "Free", value: fmtBytes(sys ? sys.memFree : 0) },
+          { label: "Cached", value: fmtBytes(sys ? sys.memCached : 0) }
+        ]
+        Row {
+          required property var modelData
+          width: parent.width
+          Text { text: modelData.label; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.muted; width: 90 }
+          Text { text: modelData.value; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.foreground }
         }
       }
 
-      Item { height: 1; width: 1 }
+      PanelSeparator {}
+
+      Row {
+        width: parent.width
+        spacing: 8
+        Text { text: "Swap"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.muted; width: 82; anchors.verticalCenter: parent.verticalCenter }
+        Rectangle {
+          width: parent.width - 140
+          height: 10
+          radius: 5
+          color: Qt.darker(Color.foreground, 1.6)
+          anchors.verticalCenter: parent.verticalCenter
+          Rectangle {
+            width: parent.width * (sys && sys.swapTotal > 0 ? sys.swapPercent / 100 : 0)
+            height: parent.height
+            radius: 5
+            color: "#66ff66"
+            Behavior on width { NumberAnimation { duration: 250 } }
+          }
+        }
+        Text { text: sys && sys.swapTotal > 0 ? Math.round(sys.swapPercent) + "%" : "-"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.foreground; anchors.verticalCenter: parent.verticalCenter }
+      }
     }
   }
 }

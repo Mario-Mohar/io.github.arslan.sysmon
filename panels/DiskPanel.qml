@@ -1,147 +1,86 @@
 import QtQuick
-import Quickshell.Io
-import qs.Commons
 import qs.Ui
-import "../format.js" as Fmt
+import qs.Commons
 
-// Disk detail panel — partition usage, mount points, free space.
 Panel {
   id: root
   moduleName: "io.github.arslan.sysmon.disk"
-  ipcTarget: "io.github.arslan.sysmon.disk"
 
+  property var sys: null
   property var anchorItem: null
   property var hostWidget: null
-  property bool openedFromHotkey: false
-  readonly property string icon: "\udb83\udcab"
-  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property color foreground: bar ? bar.barForeground : Color.foreground
-  readonly property color dim: Qt.darker(foreground, 1.55)
 
-  readonly property var coreData: hostWidget ? hostWidget.sys : null
-
-  function open() { openedFromHotkey = false; root.controller.show() }
-  function openFromHotkey() { openedFromHotkey = true; root.controller.show() }
-  function close() { root.controller.hide() }
-  function toggle() { root.opened ? close() : openFromHotkey() }
-
-  onOpenedChanged: {
-    if (opened) Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+  function stateColor(val) {
+    if (val >= 80) return "#ff3333"
+    if (val >= 60) return "#ffb800"
+    return "#ffffff"
   }
 
-  function mountLabel(mount) {
-    if (mount === "/") return "root"
-    var parts = mount.split("/")
-    return parts[parts.length - 1] || mount
+  function fmtBytes(b) {
+    if (!b || b <= 0) return "-"
+    if (b >= 1073741824) return (b / 1073741824).toFixed(1) + " GB"
+    if (b >= 1048576) return (b / 1048576).toFixed(0) + " MB"
+    return (b / 1024).toFixed(0) + " KB"
   }
 
-  PanelKeyCatcher {
-    id: keyCatcher
-    anchors.fill: parent
-    Keys.onLeftPressed: root.switchPanel(-1)
-    Keys.onRightPressed: root.switchPanel(1)
-    Keys.onEscapePressed: root.close()
+  KeyboardPanel {
+    id: panel
+    anchorItem: root.anchorItem
+    owner: root.hostWidget || root
+    bar: root.bar
+    open: root.opened
+    contentWidth: Style.space(300)
+    contentHeight: column.implicitHeight + Style.space(32)
 
     Column {
-      anchors.fill: parent
-      anchors.margins: Style.space(16)
-      spacing: Style.space(12)
+      id: column
+      width: parent.width
+      spacing: 10
 
-      PanelHero {
+      Row {
+        spacing: 8
+        Text { text: "\u{F02CA}"; font.family: Style.font.family; font.pixelSize: Style.font.title; color: stateColor(sys ? sys.diskPercent : 0) }
+        Text { text: "Disk"; font.family: Style.font.family; font.pixelSize: Style.font.title; color: Color.foreground; anchors.verticalCenter: parent.verticalCenter }
+      }
+
+      PanelSeparator {}
+
+      Row {
         width: parent.width
-        title: coreData ? Math.round(coreData.diskPercent) + "%" : "—"
-        meta: "DISK"
-        detail: coreData ? Fmt.bytes(coreData.diskUsed) + " / " + Fmt.bytes(coreData.diskTotal) : ""
-        iconComponent: Text {
-          text: root.icon
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.display
+        spacing: 8
+        Text { text: "Usage"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.muted; width: 82; anchors.verticalCenter: parent.verticalCenter }
+        Rectangle {
+          width: parent.width - 140
+          height: 14
+          radius: 7
+          color: Qt.darker(Color.foreground, 1.6)
+          anchors.verticalCenter: parent.verticalCenter
+          Rectangle {
+            width: parent.width * (sys ? sys.diskPercent / 100 : 0)
+            height: parent.height
+            radius: 7
+            color: stateColor(sys ? sys.diskPercent : 0)
+            Behavior on width { NumberAnimation { duration: 250 } }
+          }
         }
+        Text { text: sys ? Math.round(sys.diskPercent) + "%" : "-"; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.foreground; anchors.verticalCenter: parent.verticalCenter }
       }
 
-      PanelSeparator { width: parent.width; foreground: root.foreground }
-
-      // ── Partitions ─────────────────────────────────────────────
-      PanelSectionHeader {
-        text: "PARTITIONS"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-      }
+      PanelSeparator {}
 
       Repeater {
-        model: coreData ? coreData.diskPartitions : []
-        delegate: Column {
+        model: [
+          { label: "Total", value: fmtBytes(sys ? sys.diskTotal : 0) },
+          { label: "Used", value: fmtBytes(sys ? sys.diskUsed : 0) },
+          { label: "Free", value: fmtBytes(sys && sys.diskTotal > 0 ? sys.diskTotal - sys.diskUsed : 0) }
+        ]
+        Row {
+          required property var modelData
           width: parent.width
-          spacing: Style.space(6)
-
-          Row {
-            width: parent.width
-            Text {
-              width: parent.width * 0.35
-              text: mountLabel(modelData.mount)
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              font.bold: true
-              elide: Text.ElideRight
-            }
-            Text {
-              width: parent.width * 0.35
-              text: Fmt.bytes(modelData.used) + " / " + Fmt.bytes(modelData.total)
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-            Text {
-              width: parent.width * 0.3
-              text: Fmt.bytes(modelData.avail) + " free"
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              horizontalAlignment: Text.AlignRight
-            }
-          }
-
-          // Usage bar
-          Item {
-            width: parent.width
-            height: Style.space(14)
-
-            Rectangle {
-              anchors.fill: parent
-              color: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.08)
-              radius: Style.space(4)
-            }
-
-            Rectangle {
-              width: Math.max(2, parent.width * modelData.percent / 100)
-              height: parent.height
-              color: modelData.percent >= 90 ? Color.urgent : Color.accent
-              radius: Style.space(4)
-            }
-
-            Text {
-              anchors.centerIn: parent
-              text: modelData.percent + "%"
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
-            }
-          }
-
-          // Device path
-          Text {
-            text: modelData.device
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption - 2
-          }
+          Text { text: modelData.label; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.muted; width: 90 }
+          Text { text: modelData.value; font.family: Style.font.family; font.pixelSize: Style.font.body; color: Color.foreground }
         }
       }
-
-      Item { height: 1; width: 1 }
     }
   }
 }
