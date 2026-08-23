@@ -1,189 +1,163 @@
 import QtQuick
 import qs.Ui
 import qs.Commons
+import "format.js" as Fmt
 
-// SysMon bar widget: CPU, memory, temperature, and disk stats.
-// Each segment opens its own detail panel.
 BarWidget {
   id: root
   moduleName: "io.github.arslan.sysmon"
 
-  // ── Settings ────────────────────────────────────────────────────────
-  readonly property int intervalSec: setting("interval", 2)
-  readonly property bool showCpu: setting("showCpu", true)
-  readonly property bool showMemory: setting("showMemory", true)
-  readonly property bool showTemp: setting("showTemp", true)
-  readonly property bool showDisk: setting("showDisk", true)
-  readonly property bool showIcons: setting("showIcons", true)
-  readonly property real cpuWarnPercent: setting("cpuWarnPercent", 90)
-  readonly property real memWarnPercent: setting("memWarnPercent", 90)
-  readonly property string clickCommand: setting("onClick", "omarchy-launch-or-focus-tui btop")
-
-  // Nerd Font glyphs
-  readonly property string cpuIcon: "\uf4bc"        // nf-md-chip
-  readonly property string memIcon: "\udb81\ude1a"  // nf-md-memory
-  readonly property string tempIcon: "\udb81\udc5b" // nf-md-thermometer
-  readonly property string diskIcon: "\udb83\udcab" // nf-harddisk
-
+  // ---- live data for the bar labels (panel collects its own via collector.py)
   SysMonCore {
     id: sys
-    interval: root.intervalSec
+    intervalMs: 2000
   }
 
-  function withIcon(icon, body) {
-    return showIcons && icon !== "" ? icon + " " + body : body
+  readonly property color white: "#ffffff"
+  readonly property real tempC: sys.tempCurrent / 1000
+
+  function stateColor(val, base) {
+    if (val >= 80) return "#ff3333"
+    if (val >= 60) return "#ffb800"
+    return base
   }
 
-  // ── Bar labels ──────────────────────────────────────────────────────
-  readonly property string cpuText: Math.round(sys.cpuPercent) + "%"
-  readonly property string cpuLabel: withIcon(cpuIcon, sys.cpuFreqGhz + "GHz (" + cpuText + ")")
-  readonly property string memLabel: withIcon(memIcon, Math.round(sys.memPercent) + "%")
-  readonly property string tempLabel: withIcon(tempIcon, Math.round(sys.tempCurrent / 1000) + "°")
-  readonly property string diskLabel: withIcon(diskIcon, Math.round(sys.diskPercent) + "%")
-
-  readonly property string cpuTooltip: "CPU " + sys.cpuFreqGhz + "GHz · " + cpuText
-    + (sys.loadAvg[0] > 0 ? " · load " + sys.loadAvg[0].toFixed(2) : "")
-  readonly property string memTooltip: "RAM " + Math.round(sys.memPercent) + "%"
-    + (sys.swapTotal > 0 ? " · swap " + Math.round(sys.swapPercent) + "%" : "")
-  readonly property string tempTooltip: "Temperature " + Math.round(sys.tempCurrent / 1000) + "°C"
-  readonly property string diskTooltip: "Disk " + Math.round(sys.diskPercent) + "% used"
-
-  // ── Panel loaders ───────────────────────────────────────────────────
-  function injectPanel(loader) {
-    if (!loader.item) return
-    if ("bar" in loader.item) loader.item.bar = root.bar
-    if ("settings" in loader.item) loader.item.settings = root.settings
-    if ("anchorItem" in loader.item) loader.item.anchorItem = loader.anchorRef
-    if ("hostWidget" in loader.item) loader.item.hostWidget = root
+  function textColor(val) {
+    return val >= 80 ? "#ff3333" : white
   }
+
+  function pillColor() {
+    return Qt.lighter(Color.bar.background, 1.2)
+  }
+
+  function tempIcon() {
+    var c = Math.round(tempC)
+    if (c >= 80) return "\u{F1807}"
+    if (c >= 65) return "\u{F0510}"
+    if (c >= 50) return "\u{F10C2}"
+    return "\u{F050F}"
+  }
+
+  function freqText() {
+    return sys.cpuFreqMhz >= 1000 ? sys.cpuFreqGhz + "GHz" : sys.cpuFreqMhz + "MHz"
+  }
+
+  // ---- panel wiring (vitals pattern) ---------------------------------------
+  function injectPanel() {
+    var p = panelLoader.item
+    if (!p) return
+    if ("bar" in p) p.bar = root.bar
+    if ("settings" in p) p.settings = root.settings
+    if ("anchorItem" in p) p.anchorItem = cpuBtn
+    if ("hostWidget" in p) p.hostWidget = root
+  }
+
+  function openTab(key) {
+    var p = panelLoader.item
+    if (!p) return
+    if (p.showTab && p.showTab(key)) { /* switched */ }
+    if (!p.opened) p.openFromHotkey()
+  }
+
+  function togglePanel() {
+    if (panelLoader.item) panelLoader.item.toggle()
+  }
+
+  readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
 
   Loader {
-    id: cpuPanelLoader
+    id: panelLoader
     active: true
-    source: Qt.resolvedUrl("panels/CpuPanel.qml")
+    source: Qt.resolvedUrl("Panel.qml")
     visible: false
-    property var anchorRef: cpuBtn
-    onLoaded: { injectPanel(this); Qt.callLater(function() { injectPanel(cpuPanelLoader) }) }
-  }
-  Loader {
-    id: memPanelLoader
-    active: true
-    source: Qt.resolvedUrl("panels/MemPanel.qml")
-    visible: false
-    property var anchorRef: memBtn
-    onLoaded: { injectPanel(this); Qt.callLater(function() { injectPanel(memPanelLoader) }) }
-  }
-  Loader {
-    id: tempPanelLoader
-    active: true
-    source: Qt.resolvedUrl("panels/TempPanel.qml")
-    visible: false
-    property var anchorRef: tempBtn
-    onLoaded: { injectPanel(this); Qt.callLater(function() { injectPanel(tempPanelLoader) }) }
-  }
-  Loader {
-    id: diskPanelLoader
-    active: true
-    source: Qt.resolvedUrl("panels/DiskPanel.qml")
-    visible: false
-    property var anchorRef: diskBtn
-    onLoaded: { injectPanel(this); Qt.callLater(function() { injectPanel(diskPanelLoader) }) }
+    onLoaded: {
+      root.injectPanel()
+      Qt.callLater(root.injectPanel)
+    }
   }
 
-  // ── IPC targets for hotkey toggling ─────────────────────────────────
-  IpcHandler {
-    target: "io.github.arslan.sysmon.cpu"
-    function toggle(): void { cpuPanelLoader.item && cpuPanelLoader.item.toggle() }
-  }
-  IpcHandler {
-    target: "io.github.arslan.sysmon.mem"
-    function toggle(): void { memPanelLoader.item && memPanelLoader.item.toggle() }
-  }
-  IpcHandler {
-    target: "io.github.arslan.sysmon.temp"
-    function toggle(): void { tempPanelLoader.item && tempPanelLoader.item.toggle() }
-  }
-  IpcHandler {
-    target: "io.github.arslan.sysmon.disk"
-    function toggle(): void { diskPanelLoader.item && diskPanelLoader.item.toggle() }
-  }
+  // ---- bar widget: 4 colored metric buttons ---------------------------------
+  implicitWidth: row.implicitWidth
+  implicitHeight: Style.bar.sizeHorizontal
 
-  // ── Bar layout ──────────────────────────────────────────────────────
-  implicitWidth: layout.implicitWidth
-  implicitHeight: layout.implicitHeight
-
-  Grid {
-    id: layout
+  Row {
+    id: row
     anchors.centerIn: parent
-    columns: root.vertical ? 1 : 99
+    spacing: 6
 
-    WidgetButton {
-      id: cpuBtn
-      bar: root.bar
-      visible: root.showCpu
-      text: root.cpuLabel
-      active: root.cpuWarnPercent > 0 && sys.cpuPercent >= root.cpuWarnPercent
-      fontSize: Style.font.caption
-      horizontalMargin: 5
-      tooltipText: root.cpuTooltip
-      onPressed: function(b) {
-        if (b === Qt.LeftButton) {
-          if (cpuPanelLoader.item) cpuPanelLoader.item.toggle()
-        } else {
-          root.bar.run(root.clickCommand)
-        }
+    Rectangle {
+      implicitWidth: cpuBtn.implicitWidth
+      implicitHeight: cpuBtn.implicitHeight
+      radius: height / 2
+      color: pillColor()
+
+      WidgetButton {
+        id: cpuBtn
+        anchors.fill: parent
+        bar: root.bar
+        text: "<font color='" + stateColor(sys.cpuPercent, "#4da6ff") + "'>\u{F035B}</font> <font color='" + textColor(sys.cpuPercent) + "'>" + freqText() + " (" + Math.round(sys.cpuPercent) + "%)</font>"
+        fontSize: Style.font.body
+        horizontalMargin: 5
+        verticalPadding: 2
+        tooltipText: sys.cpuModelName ? sys.cpuModelName : "CPU"
+        onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("cpu") }
       }
     }
 
-    WidgetButton {
-      id: memBtn
-      bar: root.bar
-      visible: root.showMemory
-      text: root.memLabel
-      active: root.memWarnPercent > 0 && sys.memPercent >= root.memWarnPercent
-      fontSize: Style.font.caption
-      horizontalMargin: 5
-      tooltipText: root.memTooltip
-      onPressed: function(b) {
-        if (b === Qt.LeftButton) {
-          if (memPanelLoader.item) memPanelLoader.item.toggle()
-        } else {
-          root.bar.run(root.clickCommand)
-        }
+    Rectangle {
+      implicitWidth: memBtn.implicitWidth
+      implicitHeight: memBtn.implicitHeight
+      radius: height / 2
+      color: pillColor()
+
+      WidgetButton {
+        id: memBtn
+        anchors.fill: parent
+        bar: root.bar
+        text: "<font color='" + stateColor(sys.memPercent, "#66ff66") + "'>\u{F046D}</font> <font color='" + textColor(sys.memPercent) + "'>" + Math.round(sys.memPercent) + "%</font>"
+        fontSize: Style.font.body
+        horizontalMargin: 5
+        verticalPadding: 2
+        tooltipText: Fmt.bytes(sys.memUsed) + " / " + Fmt.bytes(sys.memTotal)
+        onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("mem") }
       }
     }
 
-    WidgetButton {
-      id: tempBtn
-      bar: root.bar
-      visible: root.showTemp
-      text: root.tempLabel
-      fontSize: Style.font.caption
-      horizontalMargin: 5
-      tooltipText: root.tempTooltip
-      onPressed: function(b) {
-        if (b === Qt.LeftButton) {
-          if (tempPanelLoader.item) tempPanelLoader.item.toggle()
-        } else {
-          root.bar.run(root.clickCommand)
-        }
+    Rectangle {
+      implicitWidth: tempBtn.implicitWidth
+      implicitHeight: tempBtn.implicitHeight
+      radius: height / 2
+      color: pillColor()
+
+      WidgetButton {
+        id: tempBtn
+        anchors.fill: parent
+        bar: root.bar
+        text: "<font color='" + stateColor(tempC, tempC >= 50 ? "#ff9933" : "#4da6ff") + "'>" + tempIcon() + "</font> <font color='" + textColor(tempC >= 80 ? 100 : 0) + "'>" + Math.round(tempC) + "\u00B0</font>"
+        fontSize: Style.font.body
+        horizontalMargin: 5
+        verticalPadding: 2
+        tooltipText: Math.round(tempC) + "°C / " + Math.round(tempC * 1.8 + 32) + "°F"
+        onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("temp") }
       }
     }
 
-    WidgetButton {
-      id: diskBtn
-      bar: root.bar
-      visible: root.showDisk
-      text: root.diskLabel
-      fontSize: Style.font.caption
-      horizontalMargin: 5
-      tooltipText: root.diskTooltip
-      onPressed: function(b) {
-        if (b === Qt.LeftButton) {
-          if (diskPanelLoader.item) diskPanelLoader.item.toggle()
-        } else {
-          root.bar.run(root.clickCommand)
-        }
+    Rectangle {
+      implicitWidth: diskBtn.implicitWidth
+      implicitHeight: diskBtn.implicitHeight
+      radius: height / 2
+      color: pillColor()
+
+      WidgetButton {
+        id: diskBtn
+        anchors.fill: parent
+        bar: root.bar
+        text: "<font color='" + stateColor(sys.diskPercent, white) + "'>\u{F02CA}</font> <font color='" + textColor(sys.diskPercent) + "'>" + Math.round(sys.diskPercent) + "%</font>"
+        fontSize: Style.font.body
+        horizontalMargin: 5
+        verticalPadding: 2
+        tooltipText: Fmt.bytes(sys.diskUsed) + " / " + Fmt.bytes(sys.diskTotal)
+        onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("disk") }
       }
     }
   }
