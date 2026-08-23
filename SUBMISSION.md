@@ -2,7 +2,7 @@
 
 ## Objective
 
-Create and submit plugins to the Omarchy Plugin Competition by Monday Aug 24, 9am CEST.
+Create and submit plugins to the Omarchy Plugin Competition before the final 9am CEST deadline.
 
 ## Plugin Submission Process
 
@@ -14,11 +14,14 @@ Create and submit plugins to the Omarchy Plugin Competition by Monday Aug 24, 9a
 
 ## Plugin Structure Required
 
-```
+```text
 plugin-id/
   manifest.json    # Required: metadata, entry points, settings
-  BarWidget.qml    # Required: bar widget entry point
-  Panel.qml        # Optional: detail panel
+  BarWidget.qml    # Required: bar widget entry point. SysMon uses SysMon.qml.
+  Panel.qml        # Optional: detail panel. SysMon uses a tabbed panel shell.
+  tabs/            # Optional: tab bodies for larger dashboards
+  components/      # Optional: reusable QML controls
+  collector.py     # Optional: helper process for richer data collection
   README.md        # Required: description
   preview.png      # Required: screenshot
 ```
