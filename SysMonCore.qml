@@ -47,8 +47,9 @@ QtObject {
   }
 
   property var _tempProc: Process {
-    command: ["sh", "-c", "for z in /sys/class/thermal/thermal_zone*; do echo $(basename $z):$(cat $z/temp 2>/dev/null); done"]
+    command: ["sh", "-c", "for z in /sys/class/thermal/thermal_zone*/temp; do d=${z%/temp}; echo \"${d##*/}:$(cat \"$z\" 2>/dev/null)\"; done"]
     stdout: SplitParser { onRead: function(line) { root._parseThermalZone(line) } }
+    onExited: root._pickBestTemp()
   }
 
   property Timer _timer: Timer {
@@ -66,14 +67,12 @@ QtObject {
     _parseMem(_memFile.text())
     _parseLoad(_loadFile.text())
     _parseCpuFreq(_cpuInfoFile.text())
-    _parseThermal(_thermalFile.text())
     _diskProc.running = true
     _tempProc.running = true
     _statFile.reload()
     _memFile.reload()
     _loadFile.reload()
     _cpuInfoFile.reload()
-    _thermalFile.reload()
   }
 
   function _parseCpu(text) {
@@ -162,7 +161,7 @@ QtObject {
 
   function _parseThermal(text) {
     var val = parseInt(String(text || "").trim())
-    if (!isNaN(val)) tempCurrent = val
+    if (!isNaN(val) && val > 0) tempCurrent = val
   }
 
   function _parseThermalZone(line) {
@@ -183,6 +182,23 @@ QtObject {
     }
     if (!found) zones.push({ name: name, temp: temp })
     thermalZones = zones
+  }
+
+  function _pickBestTemp() {
+    var preferred = ["x86_pkg_temp", "coretemp", "B0D4", "k10temp", "cpu_thermal", "soc_thermal"]
+    var best = null
+    var bestPriority = 999
+    for (var i = 0; i < thermalZones.length; i++) {
+      var z = thermalZones[i]
+      if (!z || !z.temp || z.temp <= 0) continue
+      var pri = preferred.indexOf(z.name)
+      if (pri === -1) pri = 50
+      if (pri < bestPriority) {
+        bestPriority = pri
+        best = z.temp
+      }
+    }
+    if (best !== null) tempCurrent = best
   }
 
   function _parseDiskLine(line) {

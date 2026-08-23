@@ -872,6 +872,7 @@ def main():
         snap = {
             "t": time.time(),
             "host": host,
+            "kernel": read_str("/proc/sys/kernel/osrelease"),
             "uptime": float(up),
             "load": [float(x) for x in load[:3]],
             "ncpu": NCPU,

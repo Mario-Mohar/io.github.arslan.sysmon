@@ -16,6 +16,7 @@ Panel {
   id: root
   moduleName: "io.github.arslan.sysmon"
   ipcTarget: "io.github.arslan.sysmon"
+
   // manageIpc: false so this panel can own the single IpcHandler the target
   // permits — needed for the showTab method below.
   manageIpc: false
@@ -94,6 +95,7 @@ Panel {
   // ---- data -----------------------------------------------------------------
   property var snapshot: null
   readonly property bool hasData: snapshot !== null
+  property bool heroExpanded: false
   readonly property var cpu: snapshot ? snapshot.cpu : null
   readonly property var mem: snapshot ? snapshot.mem : null
   readonly property var disks: snapshot ? (snapshot.disks || []) : []
@@ -322,17 +324,18 @@ Panel {
   // ---- tabs ------------------------------------------------------------------
   readonly property var tabs: {
     var t = [
+      { key: "overview", label: "Overview" },
       { key: "cpu", label: "CPU" },
       { key: "temp", label: "Temps" },
       { key: "mem", label: "Memory" },
-      { key: "disk", label: "Disks" },
-      { key: "net", label: "Network" }
+      { key: "disk", label: "Disks" }
     ]
     if (root.gpus.length > 0 || !root.hasData) t.push({ key: "gpu", label: "GPU" })
-    t.push({ key: "proc", label: "Processes" })
     return t
   }
-  property string tabKey: "cpu"
+  property string tabKey: "overview"
+  property string subPage: ""
+  property string overviewProcSort: "cpu"
   readonly property int tabIndex: {
     for (var i = 0; i < tabs.length; i++) if (tabs[i].key === tabKey) return i
     return 0
@@ -346,12 +349,21 @@ Panel {
     if (tabs.length === 0) return
     var n = tabs.length
     var i = ((index % n) + n) % n
-    if (tabs[i].key === tabKey) return
+    if (tabs[i].key === tabKey && subPage === "") return
     if (filtering) stopFiltering()
     tabKey = tabs[i].key
+    subPage = ""
     procIndex = 0
     cursorFromKeys = false
-    if (tabKey === "proc") rebuildProcs()
+  }
+
+  function showSubPage(page) {
+    subPage = page
+    if (page === "proc") rebuildProcs()
+  }
+
+  function goBack() {
+    subPage = ""
   }
 
   // Jump to a tab by key: cpu · mem · disk · net · gpu · proc.
@@ -383,6 +395,20 @@ Panel {
   readonly property string headline: {
     var snap = snapshot
     if (!snap) return "—"
+    if (tabKey === "overview" && subPage === "") return "OK"
+    if (tabKey === "overview" && subPage === "net") {
+      var n = snap.net
+      if (n && n.ifaces) {
+        var totalRx = 0, totalTx = 0
+        for (var i = 0; i < n.ifaces.length; i++) {
+          totalRx += n.ifaces[i].rx_bps || 0
+          totalTx += n.ifaces[i].tx_bps || 0
+        }
+        return "\u2193 " + Model.rate(totalRx)
+      }
+      return "—"
+    }
+    if (tabKey === "overview" && subPage === "proc") return snap.processes ? Model.count(snap.processes.length) : "—"
     if (tabKey === "cpu") return snap.cpu ? Model.percent(snap.cpu.total) : "—"
     if (tabKey === "temp") return snap.cpu && snap.cpu.temp !== null && snap.cpu.temp !== undefined ? Model.temp(snap.cpu.temp) : "—"
     if (tabKey === "mem") return snap.mem && snap.mem.total > 0 ? Model.percent(snap.mem.used * 100 / snap.mem.total) : "—"
@@ -390,26 +416,22 @@ Panel {
       var d = snap.disks && snap.disks.length ? snap.disks[0] : null
       return d && d.total > 0 ? Model.percent(d.used * 100 / d.total) : "—"
     }
-    if (tabKey === "net") {
-      var i = currentIface()
-      return i ? Model.rate(i.rx_bps) : "—"
-    }
     if (tabKey === "gpu") {
       var g = snap.gpus && snap.gpus.length ? snap.gpus[0] : null
       return g && g.busy !== null && g.busy !== undefined ? Model.percent(g.busy) : "—"
     }
-    if (tabKey === "proc") return Model.count(snap.processes ? snap.processes.length : 0)
     return "—"
   }
 
   readonly property string headlineCaption: {
+    if (tabKey === "overview" && subPage === "") return "SYSTEM HEALTH"
+    if (tabKey === "overview" && subPage === "net") return "RECEIVING"
+    if (tabKey === "overview" && subPage === "proc") return "PROCESSES"
     if (tabKey === "cpu") return "CPU"
     if (tabKey === "temp") return "TEMPERATURE"
     if (tabKey === "mem") return "MEMORY"
     if (tabKey === "disk") return disks.length ? Model.mountLabel(disks[0].mount || "/").toUpperCase() : "DISK"
-    if (tabKey === "net") return "RECEIVING"
     if (tabKey === "gpu") return "GPU"
-    if (tabKey === "proc") return "PROCESSES"
     return ""
   }
 
@@ -590,7 +612,7 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(520))
+    contentWidth: panel.fittedContentWidth(Style.space(600))
     // A dashboard: hold a comfortable minimum so switching tabs doesn't make
     // the card breathe, and cap so it never runs off the screen.
     contentHeight: panel.fittedContentHeight(Math.max(column.implicitHeight, Style.space(430)), Style.space(760))
@@ -673,81 +695,130 @@ Panel {
           width: panelFlick.width
           spacing: Style.space(12)
 
-          // ---------- Hero: chip icon · host / uptime · headline figure ----------
+          // ---------- Hero: collapsed + expanded ----------
           Item {
             width: parent.width
-            implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, heroValue.implicitHeight)
+            implicitHeight: Style.space(32)
 
-            Text {
-              id: heroIcon
-              text: root.icon
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.display
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-            }
+            // ---- HEADER ROW: always visible ----
+            Item {
+              id: heroHeaderRow
+              width: parent.width
+              height: Style.space(32)
 
-            Column {
-              id: heroLabels
-              anchors.left: heroIcon.right
-              anchors.leftMargin: Style.space(14)
-              anchors.right: heroValue.left
-              anchors.rightMargin: Style.space(10)
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
+              Row {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(14)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(8)
 
-              Text {
-                text: root.snapshot ? root.snapshot.host : "SysMon"
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.title
-                font.bold: true
-                elide: Text.ElideRight
-                width: parent.width
+                Text {
+                  text: root.icon
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                  text: root.snapshot ? root.snapshot.host : "SysMon"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                  text: "\u00B7"
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                  text: {
+                    if (!root.snapshot) return ""
+                    return root.snapshot.uptime ? ("UP " + Model.uptime(root.snapshot.uptime)) : ""
+                  }
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  anchors.verticalCenter: parent.verticalCenter
+                }
               }
 
-              Text {
-                text: root.snapshot
-                  ? ("UP " + Model.uptime(root.snapshot.uptime) + "  ·  LOAD " + Model.loadAvg(root.snapshot.load)).toUpperCase()
-                  : "READING VITALS…"
-                color: root.faint
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                font.letterSpacing: 1.2
-                elide: Text.ElideRight
-                width: parent.width
-              }
-            }
-
-            Column {
-              id: heroValue
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: 0
-
-              Text {
+              Column {
                 anchors.right: parent.right
-                text: root.headline
-                color: root.foreground
-                font.family: root.fontFamily
-                // Rates ("14.3 KiB/s") run long; step down so the hero labels keep room.
-                font.pixelSize: root.headline.length > 5 ? Style.font.display : Style.font.displayLarge
-                font.bold: true
+                anchors.rightMargin: Style.space(14)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 0
+
+                Text {
+                  text: root.headline
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.heading
+                  font.bold: true
+                  horizontalAlignment: Text.AlignRight
+                }
+                Text {
+                  text: root.headlineCaption
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption - 1
+                  font.bold: true
+                  font.letterSpacing: 1
+                  horizontalAlignment: Text.AlignRight
+                }
               }
 
-              Text {
-                anchors.right: parent.right
-                text: root.headlineCaption
-                color: root.faint
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                font.letterSpacing: 1.2
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.heroExpanded = !root.heroExpanded
               }
             }
           }
+
+          // ---- EXPANDED: overview line ----
+          Column {
+            visible: root.heroExpanded
+            width: parent.width
+            spacing: Style.space(2)
+
+            Text {
+              width: parent.width
+              text: {
+                if (!root.snapshot) return ""
+                var p = []
+                if (root.snapshot.cpu && root.snapshot.cpu.model) {
+                  var cpu = root.snapshot.cpu.model
+                  var cores = root.snapshot.cpu.cores ? root.snapshot.cpu.cores.length : 0
+                  p.push(cpu + (cores ? " (" + cores + ")" : ""))
+                }
+                if (root.snapshot.mem && root.snapshot.mem.total > 0) {
+                  p.push(Model.bytesShort(root.snapshot.mem.total))
+                }
+                if (root.snapshot.mem && root.snapshot.mem.swap_total > 0) {
+                  var hasZram = false
+                  if (root.snapshot.blockdevs) {
+                    for (var i = 0; i < root.snapshot.blockdevs.length; i++) {
+                      if (root.snapshot.blockdevs[i].name && root.snapshot.blockdevs[i].name.indexOf("zram") === 0) { hasZram = true; break }
+                    }
+                  }
+                  var label = hasZram ? "SWAP(zram)" : "SWAP(disk)"
+                  p.push(label + ": " + Model.bytesShort(root.snapshot.mem.swap_used) + "/" + Model.bytesShort(root.snapshot.mem.swap_total))
+                }
+                return p.join("  \u00B7  ")
+              }
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+            }
+          }
+
+          // Separator
+          Rectangle { width: parent.width; height: 1; color: root.alpha(root.foreground, 0.06) }
 
           // ---------- Tabs ----------
           Row {
@@ -774,8 +845,8 @@ Panel {
                 horizontalPadding: Style.space(4)
                 verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
                 bordered: true
-                active: root.tabIndex === index
-                hasCursor: root.cursorActive && root.tabIndex === index
+                active: root.tabIndex === index && root.subPage === ""
+                hasCursor: root.cursorActive && root.tabIndex === index && root.subPage === ""
                 onClicked: { root.cursorActive = false; root.selectTab(index) }
               }
             }
@@ -783,14 +854,613 @@ Panel {
 
           PanelSeparator { foreground: root.foreground }
 
+          // Back button for sub-pages
+          Item {
+            width: parent.width
+            height: root.subPage !== "" ? Style.space(28) : 0
+            visible: root.subPage !== ""
+
+            Rectangle {
+              anchors.fill: parent
+              anchors.leftMargin: Style.space(14)
+              anchors.rightMargin: Style.space(14)
+              radius: Style.space(6)
+              color: root.alpha(root.foreground, 0.04)
+
+              Text {
+                text: "\u2190 Back"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.goBack()
+              }
+            }
+          }
+
           // ---------- Tab bodies: only the selected one is instantiated ----------
+          Loader { width: parent.width; active: root.tabKey === "overview" && root.subPage === ""; visible: active; sourceComponent: overviewTab }
+          Loader { width: parent.width; active: root.tabKey === "overview" && root.subPage === "net"; visible: active; sourceComponent: netTab }
+          Loader { width: parent.width; active: root.tabKey === "overview" && root.subPage === "proc"; visible: active; sourceComponent: procTabComponent }
           Loader { width: parent.width; active: root.tabKey === "cpu"; visible: active; sourceComponent: cpuTab }
           Loader { width: parent.width; active: root.tabKey === "temp"; visible: active; sourceComponent: tempTab }
           Loader { width: parent.width; active: root.tabKey === "mem"; visible: active; sourceComponent: memTab }
           Loader { width: parent.width; active: root.tabKey === "disk"; visible: active; sourceComponent: diskTab }
-          Loader { width: parent.width; active: root.tabKey === "net"; visible: active; sourceComponent: netTab }
           Loader { width: parent.width; active: root.tabKey === "gpu"; visible: active; sourceComponent: gpuTab }
-          Loader { id: procLoader; width: parent.width; active: root.tabKey === "proc"; visible: active; sourceComponent: procTabComponent }
+        }
+      }
+    }
+  }
+
+  // ======================================================= Overview
+  Component {
+    id: overviewTab
+
+    Item {
+      property var panel: root
+      width: parent ? parent.width : 0
+      height: overviewCol.implicitHeight + Style.space(20)
+
+      Column {
+        id: overviewCol
+        anchors.left: parent.left
+        anchors.leftMargin: Style.space(14)
+        anchors.right: parent.right
+        anchors.rightMargin: Style.space(14)
+        anchors.top: parent.top
+        anchors.topMargin: Style.space(10)
+        spacing: Style.space(8)
+
+        // ---- System health header ----
+        Item {
+          width: parent.width
+          height: healthLabel.implicitHeight
+
+          Text {
+            id: healthLabel
+            text: "SYSTEM HEALTH"
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+          }
+          Text {
+            text: "OK"
+            color: "#66ff66"
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+          }
+        }
+
+        // ---- Uptime + Load ----
+        Text {
+          width: parent.width
+          text: {
+            if (!root.snapshot) return ""
+            var p = []
+            if (root.snapshot.uptime) p.push("UP " + Model.uptime(root.snapshot.uptime))
+            if (root.snapshot.load) p.push("LOAD " + Model.loadAvg(root.snapshot.load))
+            return p.join("  \u00B7  ")
+          }
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+
+        // ---- CPU with meter ----
+        Item {
+          width: parent.width
+          height: cpuLabel.implicitHeight + Style.space(8) + Style.space(6)
+
+          Column {
+            width: parent.width
+            spacing: Style.space(2)
+
+            Item {
+              width: parent.width
+              height: cpuLabel.implicitHeight
+
+              Text {
+                id: cpuLabel
+                text: "CPU"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Row {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(4)
+
+                Text {
+                  text: {
+                    if (!root.snapshot || !root.snapshot.cpu) return ""
+                    var cpu = root.snapshot.cpu
+                    var freq = cpu.freq_mhz ? (" \u00B7 " + Model.mhz(cpu.freq_mhz)) : ""
+                    return Model.percent(cpu.total) + freq
+                  }
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                  text: "\u2192"
+                  color: "#4da6ff"
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+              }
+            }
+
+            Rectangle {
+              width: parent.width
+              height: Style.space(6)
+              radius: Style.space(3)
+              color: root.alpha(root.foreground, 0.1)
+
+              Rectangle {
+                width: parent.width * root.clamp(root.snapshot && root.snapshot.cpu ? root.snapshot.cpu.total / 100 : 0, 0, 1)
+                height: parent.height
+                radius: parent.radius
+                color: root.stateColor(root.snapshot && root.snapshot.cpu ? root.snapshot.cpu.total : 0, "#4da6ff")
+              }
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.selectTab(1)
+          }
+        }
+
+        // ---- Memory with meter ----
+        Item {
+          width: parent.width
+          height: memLabel.implicitHeight + Style.space(8) + Style.space(6)
+
+          Column {
+            width: parent.width
+            spacing: Style.space(2)
+
+            Item {
+              width: parent.width
+              height: memLabel.implicitHeight
+
+              Text {
+                id: memLabel
+                text: "MEMORY"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Row {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(4)
+
+                Text {
+                  text: {
+                    if (!root.snapshot || !root.snapshot.mem) return ""
+                    var m = root.snapshot.mem
+                    var pct = m.total > 0 ? Math.round(m.used * 100 / m.total) : 0
+                    return pct + "%  \u00B7  " + Model.bytesShort(m.used) + " / " + Model.bytesShort(m.total)
+                  }
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                  text: "\u2192"
+                  color: "#4da6ff"
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+              }
+            }
+
+            Rectangle {
+              width: parent.width
+              height: Style.space(6)
+              radius: Style.space(3)
+              color: root.alpha(root.foreground, 0.1)
+
+              Rectangle {
+                width: parent.width * root.clamp(root.snapshot && root.snapshot.mem && root.snapshot.mem.total > 0 ? root.snapshot.mem.used / root.snapshot.mem.total : 0, 0, 1)
+                height: parent.height
+                radius: parent.radius
+                color: root.stateColor(root.snapshot && root.snapshot.mem && root.snapshot.mem.total > 0 ? root.snapshot.mem.used * 100 / root.snapshot.mem.total : 0, "#66ff66")
+              }
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.selectTab(3)
+          }
+        }
+
+        // ---- Temp + Disk (side by side) ----
+        Item {
+          width: parent.width
+          height: Style.space(20)
+
+          Row {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(4)
+
+            Text {
+              text: "TEMP"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              text: {
+                if (!root.snapshot || !root.snapshot.cpu) return ""
+                var t = root.snapshot.cpu.temp
+                if (t === null || t === undefined) return ""
+                var c = Math.round(t)
+                var band = root.tempBand(t)
+                return c + "\u00B0" + " \u00B7 " + root.tempBands[band].label
+              }
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              text: "\u2192"
+              color: "#4da6ff"
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(4)
+
+            Text {
+              text: "DISK"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              text: {
+                if (!root.snapshot || !root.snapshot.disks || root.snapshot.disks.length === 0) return ""
+                var d = root.snapshot.disks[0]
+                return Model.percent(d.used * 100 / d.total) + " \u00B7 " + Model.bytesShort(d.used) + " / " + Model.bytesShort(d.total)
+              }
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              text: "\u2192"
+              color: "#4da6ff"
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          MouseArea {
+            anchors.left: parent.left
+            anchors.leftMargin: -Style.space(4)
+            width: parent.width / 2
+            height: parent.height
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.selectTab(2)
+          }
+          MouseArea {
+            anchors.right: parent.right
+            anchors.rightMargin: -Style.space(4)
+            width: parent.width / 2
+            height: parent.height
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.selectTab(4)
+          }
+        }
+
+        // ---- Network with SSID + link ----
+        Item {
+          width: parent.width
+          height: Style.space(20)
+
+          Row {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(4)
+
+            Text {
+              text: "NETWORK"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              text: {
+                if (!root.snapshot || !root.snapshot.net) return ""
+                var n = root.snapshot.net
+                var totalRx = 0, totalTx = 0
+                if (n.ifaces) {
+                  for (var i = 0; i < n.ifaces.length; i++) {
+                    totalRx += n.ifaces[i].rx_bps || 0
+                    totalTx += n.ifaces[i].tx_bps || 0
+                  }
+                }
+                return "\u2193 " + Model.rate(totalRx) + "  \u2191 " + Model.rate(totalTx)
+              }
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(4)
+
+            Text {
+              text: {
+                if (!root.snapshot || !root.snapshot.net) return ""
+                var n = root.snapshot.net
+                if (n.ifaces) {
+                  for (var i = 0; i < n.ifaces.length; i++) {
+                    if (n.ifaces[i].ssid) return n.ifaces[i].ssid
+                  }
+                }
+                return ""
+              }
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              text: "\u2192"
+              color: "#4da6ff"
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.showSubPage("net")
+          }
+        }
+
+        // ---- GPU (if present) ----
+        Item {
+          width: parent.width
+          height: root.gpus.length > 0 ? Style.space(20) : 0
+          visible: root.gpus.length > 0
+
+          Row {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(4)
+
+            Text {
+              text: "GPU"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              text: {
+                if (!root.snapshot || !root.snapshot.gpus || root.snapshot.gpus.length === 0) return ""
+                var g = root.snapshot.gpus[0]
+                var pct = g.busy !== null && g.busy !== undefined ? Model.percent(g.busy) : ""
+                var temp = g.temp !== null && g.temp !== undefined ? " \u00B7 " + Model.temp(g.temp) : ""
+                return pct + temp
+              }
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+              text: "\u2192"
+              color: "#4da6ff"
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.selectTab(5)
+          }
+        }
+
+        // ---- Separator ----
+        Rectangle { width: parent.width; height: 1; color: root.alpha(root.foreground, 0.06) }
+
+        // ---- Top Processes header + sort toggle ----
+        Item {
+          width: parent.width
+          height: topProcLabel.implicitHeight
+
+          Text {
+            id: topProcLabel
+            text: "TOP PROCESSES"
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+          }
+
+          Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(8)
+
+              // CPU sort toggle
+              Text {
+                text: "CPU"
+                color: root.overviewProcSort === "cpu" ? "#4da6ff" : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: root.overviewProcSort === "cpu"
+                anchors.verticalCenter: parent.verticalCenter
+
+                MouseArea {
+                  anchors.fill: parent
+                  anchors.margins: -Style.space(4)
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.overviewProcSort = "cpu"
+                }
+              }
+
+              Text {
+                text: "\u00B7"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              // RAM sort toggle
+              Text {
+                text: "RAM"
+                color: root.overviewProcSort === "ram" ? "#4da6ff" : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: root.overviewProcSort === "ram"
+                anchors.verticalCenter: parent.verticalCenter
+
+                MouseArea {
+                  anchors.fill: parent
+                  anchors.margins: -Style.space(4)
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.overviewProcSort = "ram"
+                }
+              }
+
+              Text {
+                text: "\u00B7"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              // View all link
+              Text {
+                text: "View all \u2192"
+                color: "#4da6ff"
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                anchors.verticalCenter: parent.verticalCenter
+
+                MouseArea {
+                  anchors.fill: parent
+                  anchors.margins: -Style.space(4)
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.showSubPage("proc")
+                }
+              }
+          }
+        }
+
+        // ---- Top 3 processes ----
+        Repeater {
+          model: {
+            if (!root.snapshot || !root.snapshot.processes) return []
+            var procs = root.snapshot.processes.slice()
+            if (root.overviewProcSort === "ram") {
+              procs.sort(function(a, b) { return (b.mem || 0) - (a.mem || 0) })
+            } else {
+              procs.sort(function(a, b) { return (b.cpu || 0) - (a.cpu || 0) })
+            }
+            return procs.slice(0, 3)
+          }
+
+          Item {
+            width: overviewCol.width - Style.space(14)
+            height: procName.implicitHeight
+
+            Text {
+              id: procName
+              text: modelData.name || ""
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              elide: Text.ElideRight
+              width: parent.width * 0.6
+            }
+            Text {
+              text: root.overviewProcSort === "ram"
+                ? Model.bytesShort(modelData.mem || 0)
+                : Model.percent(modelData.cpu || 0)
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.showSubPage("proc")
+            }
+          }
         }
       }
     }

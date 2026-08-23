@@ -4,14 +4,49 @@ A lightweight system monitor for the Omarchy desktop shell. It shows four live g
 
 ## Features
 
-- **Bar pills:** CPU frequency+usage, RAM usage, CPU temperature, and root disk usage
-- **7-tab dashboard:** CPU, Temp, Mem, Disk, Net, GPU, and Process tabs
-- **On-demand collector:** `collector.py` runs only while the panel is open and streams JSON snapshots to QML
+### Bar widget
+
+- Four live glance pills: CPU (frequency + usage), RAM, CPU temperature, and root disk usage
+- Lightweight sampler (`SysMonCore.qml`) reads `/proc` and `/sys` every 2 seconds with minimal overhead
+- Theme-aware styling: monochrome base with amber/red threshold accents
+
+### Panel dashboard
+
+- **7 tabs:** CPU, Temp, Mem, Disk, Net, GPU, and Process — loaded lazily via `Loader`; only the active tab runs delegates
+- **On-demand collector:** `collector.py` starts when the panel opens, emits one JSON snapshot per line, and stops on close
 - **History views:** Sparklines for CPU, temperature, network throughput, and GPU activity
-- **Disk tools:** Physical drive list, mounted filesystem gauges, unmounted partition display, mount actions, and SMART health/details
-- **Process tools:** Sort, filter, keyboard cursor, detail cards, terminate/kill confirmation, pause/resume actions
-- **Keyboard navigation:** Arrow keys, number-key tab jumps, process shortcuts, and Escape behavior that unwinds detail/filter/panel state
-- **Theme-aware styling:** Monochrome base with amber/red threshold accents and focused color islands for memory and temperatures
+- **Memory ring:** `MemRing.qml` visualization with used/free/cache/swap breakdown
+- **Reusable components:** Shared rows, meters, sparklines, action pills, and headers in `components/`
+- **Formatting helpers:** `Model.js` for bytes, rates, temperatures, and process sort/filter logic
+- **Settings:** `refreshSeconds` (1–10 s) controls collector sample interval
+
+### Disk tab
+
+- Physical drives from block metadata (partitions nested under parent drives)
+- Transport glyphs for NVMe, SATA/HDD, and USB; amber accent for removable devices
+- Removable external devices (USB sticks, SD cards) with device name, size, filesystem type, and mount point
+- Mounted filesystem usage gauges; unmounted partitions listed and expandable
+- Mount and unmount actions via `udisksctl` (custom mount path supported)
+- SMART health and details per drive/mount via `pkexec smartctl`; install prompt when `smartmontools` is missing
+- NVMe health percentage estimate where available
+
+### GPU tab
+
+- Intel and AMD metrics from sysfs (utilization, frequency, memory, temperature, power)
+- NVIDIA metrics via `nvidia-smi` when the proprietary driver is present
+
+### Process tab
+
+- Sortable, filterable process table with keyboard cursor navigation
+- Detail cards, terminate/kill confirmation, and pause/resume signal actions
+
+### Navigation and integration
+
+- Arrow keys, number-key tab jumps (`1`–`7`), process shortcuts, and Escape that unwinds detail → filter → panel
+- IPC handler exposes `showTab(key)` for shell hotkeys (see table below)
+- Temperature bands, fan rows, and clickable GPU/NVMe device links in the Temp tab
+
+See [features.md](features.md) for planned work.
 
 ## Requirements
 

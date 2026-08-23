@@ -102,7 +102,19 @@ Column {
     model: procTabRoot.listModel
     spacing: 0
     boundsBehavior: Flickable.StopAtBounds
-    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    ScrollBar.vertical: ScrollBar {
+        policy: ScrollBar.AsNeeded
+        width: Style.space(6)
+        contentItem: Rectangle {
+          radius: width / 2
+          color: parent.hovered ? panel.foreground : panel.dim
+          opacity: parent.size < parent.parent.height ? 0.4 : 0.2
+          Behavior on opacity { NumberAnimation { duration: 150 } }
+        }
+        background: Rectangle {
+          color: "transparent"
+        }
+    }
 
     delegate: Item {
       id: procRow

@@ -19,7 +19,7 @@ BarWidget {
   readonly property var snap: panelLoader.item && panelLoader.item.snapshot ? panelLoader.item.snapshot : null
   readonly property real cpuPercent: snap && snap.cpu ? snap.cpu.total : sys.cpuPercent
   readonly property real memPercent: snap ? (snap.mem && snap.mem.total > 0 ? (snap.mem.used / snap.mem.total * 100) : sys.memPercent) : sys.memPercent
-  readonly property real tempC: snap && snap.cpu && snap.cpu.temp !== null && snap.cpu.temp !== undefined ? snap.cpu.temp / 1000 : sys.tempCurrent / 1000
+  readonly property real tempC: snap && snap.cpu && snap.cpu.temp !== null && snap.cpu.temp !== undefined ? snap.cpu.temp : sys.tempCurrent / 1000
   readonly property real diskPercent: snap && snap.disk && snap.disk.total > 0 ? (snap.disk.used / snap.disk.total * 100) : sys.diskPercent
   readonly property string cpuFreqText: snap && snap.cpu && snap.cpu.freq_mhz ? (snap.cpu.freq_mhz >= 1000 ? (snap.cpu.freq_mhz / 1000).toFixed(1) + "GHz" : snap.cpu.freq_mhz + "MHz") : freqText()
 
@@ -96,7 +96,7 @@ BarWidget {
       implicitWidth: cpuBtn.implicitWidth
       implicitHeight: cpuBtn.implicitHeight
       radius: height / 2
-      color: pillColor(root.opened)
+      color: "transparent"
 
       WidgetButton {
         id: cpuBtn
@@ -115,7 +115,7 @@ BarWidget {
       implicitWidth: memBtn.implicitWidth
       implicitHeight: memBtn.implicitHeight
       radius: height / 2
-      color: pillColor(root.opened)
+      color: "transparent"
 
       WidgetButton {
         id: memBtn
@@ -134,13 +134,13 @@ BarWidget {
       implicitWidth: tempBtn.implicitWidth
       implicitHeight: tempBtn.implicitHeight
       radius: height / 2
-      color: pillColor(root.opened)
+      color: "transparent"
 
       WidgetButton {
         id: tempBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(root.tempC, root.tempC >= 50 ? "#ff9933" : "#4da6ff") + "'>" + tempIcon() + "</font> <font color='" + textColor(root.tempC >= 80 ? 100 : 0) + "'>" + Math.round(root.tempC) + "\u00B0</font>"
+        text: "<font color='" + stateColor(root.tempC, root.tempC >= 50 ? "#ff9933" : "#4da6ff") + "'>" + tempIcon() + "</font> <font color='" + textColor(root.tempC >= 80 ? 100 : 0) + "'>" + Math.round(root.tempC) + "\u00B0C</font>"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
@@ -153,7 +153,7 @@ BarWidget {
       implicitWidth: diskBtn.implicitWidth
       implicitHeight: diskBtn.implicitHeight
       radius: height / 2
-      color: pillColor(root.opened)
+      color: "transparent"
 
       WidgetButton {
         id: diskBtn
