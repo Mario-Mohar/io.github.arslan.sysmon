@@ -1,6 +1,5 @@
-*.pyc
-__pycache__/
-.DS_Store
-*.swp
-*.swo
-*~
+.claude/
+.agents/
+skills-lock.json
+backup/
+AGENTS.md
