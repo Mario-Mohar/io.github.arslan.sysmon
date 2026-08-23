@@ -259,6 +259,54 @@ def dev_for_source(source):
 _block_models = {}
 
 
+def smart_base(dev):
+    """Backing drive name for SMART queries ("nvme0n1p2" -> "nvme0n1",
+    "sda1" -> "sda"). Partitions carry no SMART; their parent does."""
+    if not dev:
+        return None
+    if "p" in dev and dev[-1].isdigit():
+        head, sep, tail = dev.rpartition("p")
+        if sep and tail.isdigit() and head[-1:].isdigit():
+            return head
+    while dev and dev[-1].isdigit():
+        dev = dev[:-1]
+    return dev or None
+
+
+def block_devices():
+    """All physical block devices (partitions excluded), including drives
+    with no mount - USB sticks show up here even when unplugged-from-fstab."""
+    out = []
+    for path in sorted(__import__("glob").glob("/sys/class/block/*")):
+        name = os.path.basename(path)
+        if os.path.exists(os.path.join(path, "partition")):
+            continue
+        if name.startswith(("loop", "ram", "zram", "fd", "sr")):
+            continue
+        real = os.path.realpath(path)
+        try:
+            size = int(read_str(os.path.join(path, "size")) or 0) * 512
+        except ValueError:
+            size = 0
+        model = None
+        candidate = os.path.join(real, "device", "model")
+        if os.path.isfile(candidate):
+            model = read_str(candidate)
+        usb = "/usb" in real
+        transport = ("usb" if usb
+                     else "nvme" if name.startswith("nvme")
+                     else "mmc" if name.startswith("mmc")
+                     else "sata")
+        out.append({
+            "name": name,
+            "model": model,
+            "bytes": size,
+            "removable": read_str(os.path.join(real, "removable")) == "1",
+            "transport": transport,
+        })
+    return out
+
+
 def block_model(dev):
     """Model string of the backing drive ("nvme0n1p5" -> its NVMe model).
     Resolved by walking sysfs up to the physical device; cached."""
@@ -321,6 +369,7 @@ def mounts():
             "mounts": [],
             "dev": dev,
             "model": block_model(dev),
+            "smart_dev": smart_base(dev),
         }
         seen[key] = entry
         order.append(entry)
@@ -746,7 +795,7 @@ def main():
             if dev and dev in cur_disk and dev in prev_disk:
                 r = (cur_disk[dev][0] - prev_disk[dev][0]) / elapsed
                 w = (cur_disk[dev][1] - prev_disk[dev][1]) / elapsed
-            disks.append({**{k: m[k] for k in ("mount", "source", "fstype", "total", "used", "free", "mounts", "model")},
+            disks.append({**{k: m[k] for k in ("mount", "source", "fstype", "total", "used", "free", "mounts", "model", "smart_dev")},
                           "read_bps": r, "write_bps": w})
 
         # ---- network
@@ -803,6 +852,8 @@ def main():
             },
             "mem": {**meminfo(), "swap_devices": swap_devices()},
             "disks": disks,
+            "has_smart": bool(shutil.which("smartctl")),
+            "blockdevs": block_devices(),
             "nvme_temp": (hwmon.temps(nvme_dev)[0][1] if hwmon.temps(nvme_dev) else None),
             "net": {"default": dflt, "ifaces": ifaces},
             "gpus": gpus.snapshot(now, hwmon),
