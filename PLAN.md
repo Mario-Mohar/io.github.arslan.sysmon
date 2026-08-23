@@ -5,9 +5,9 @@
 SysMon is a polished Omarchy bar widget and dashboard:
 
 - **Bar:** four compact live pills for CPU, memory, temperature, and disk usage.
-- **Panel:** one tabbed dashboard with CPU, Temp, Mem, Disk, Net, GPU, and Process tabs.
+- **Panel:** Overview hub plus CPU, Temps, Memory, Disks, and GPU tabs; Network and Process as Overview sub-pages.
 - **Collector:** `collector.py` streams richer snapshots only while the panel is open.
-- **Actions:** SMART checks, smartmontools install prompt, unmounted partition mount action, and process signal controls.
+- **Actions:** SMART checks, smartmontools install prompt, mount/unmount, and process signal controls.
 
 The old per-resource files under `panels/` are legacy only. The active implementation uses `Panel.qml`, `tabs/`, and `components/`.
 
@@ -62,17 +62,18 @@ Panel.qml, while open
 
 This keeps the bar cheap and avoids running Python when the panel is closed.
 
-## Dashboard tabs
+## Dashboard views
 
-| Tab | Purpose | Notes |
+| View | Purpose | Notes |
 |---|---|---|
-| CPU | CPU usage, cores, load/frequency, history | CPU-focused only; core temp grid stays in Temp |
-| Temp | CPU/core/device temps, thermal bands, fans | GPU/NVMe device rows link to their native tabs |
-| Mem | Used/free/cache/swap breakdown and ring | `MemRing.qml` is intentionally a visual focal point |
-| Disk | Physical drives, partitions, mounted filesystems, SMART, mount actions | Uses `snapshot.blockdevs` plus mounted filesystem data |
-| Net | Interfaces, RX/TX rates, history, counters | Interface selection resets network history |
-| GPU | GPU activity, memory/temp where exposed by system tools | Handles systems without a discrete GPU gracefully |
-| Process | Sortable/filterable process table and signal actions | Terminate/kill require confirmation; pause/resume are direct |
+| Overview | System health hub, resource glance cards, top processes | Default tab; inline in `Panel.qml` |
+| CPU | CPU usage, cores, load/frequency, history | CPU-focused only; core temp grid stays in Temps |
+| Temps | CPU/core/device temps, thermal bands, fans | GPU/NVMe device rows link to GPU/Disks |
+| Memory | Used/free/cache/swap breakdown and ring | `MemRing.qml` is intentionally a visual focal point |
+| Disks | Physical drives, partitions, mounted filesystems, SMART, mount/unmount | Uses `snapshot.blockdevs` plus mounted filesystem data |
+| GPU | GPU activity, memory/temp where exposed by system tools | Tab appears when GPU detected or before first snapshot |
+| Network | Interfaces, RX/TX rates, history, counters | Sub-page from Overview; uses `NetTab.qml` |
+| Processes | Sortable/filterable process table and signal actions | Sub-page from Overview; uses `ProcTab.qml` |
 
 ## Disk plan and behavior
 
@@ -89,13 +90,13 @@ This keeps the bar cheap and avoids running Python when the panel is closed.
 
 Panel-level navigation:
 
-- Left/Right or `1`-`7`: switch tabs.
-- Up/Down: scroll normal tabs or move Process cursor.
+- Left/Right or `1`–`6`: switch main tabs (Overview, CPU, Temps, Memory, Disks, GPU).
+- Up/Down: scroll normal tabs or move Process cursor on Process sub-page.
 - Enter: activate process cursor/detail.
 - Delete: request terminate for highlighted process.
-- Escape: close process detail, clear process filter, or close panel.
+- Escape: close process detail, clear filter, go back from sub-page, or close panel.
 
-Process tab shortcuts:
+Process sub-page shortcuts:
 
 - `s` / `S`: cycle sort column.
 - `r`: reverse sort.
@@ -105,26 +106,25 @@ Process tab shortcuts:
 IPC entry point:
 
 ```bash
+omarchy-shell io.github.arslan.sysmon showTab overview
 omarchy-shell io.github.arslan.sysmon showTab cpu
 omarchy-shell io.github.arslan.sysmon showTab temp
 omarchy-shell io.github.arslan.sysmon showTab mem
 omarchy-shell io.github.arslan.sysmon showTab disk
-omarchy-shell io.github.arslan.sysmon showTab net
 omarchy-shell io.github.arslan.sysmon showTab gpu
-omarchy-shell io.github.arslan.sysmon showTab proc
 ```
+
+Network and Processes are sub-pages — open from Overview in the panel UI.
 
 Known hotkey mapping:
 
 | Hotkey | Tab |
 |---|---|
 | `SUPER CTRL V` | CPU |
-| `SUPER CTRL T` | Temp |
-| `SUPER CTRL B` | Mem |
-| `SUPER CTRL D` | Disk |
-| `SUPER CTRL N` | Net |
+| `SUPER CTRL T` | Temps |
+| `SUPER CTRL B` | Memory |
+| `SUPER CTRL D` | Disks |
 | `SUPER CTRL G` | GPU |
-| `SUPER CTRL P` | Process |
 
 ## Settings
 

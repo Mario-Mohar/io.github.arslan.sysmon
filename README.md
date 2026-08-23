@@ -2,11 +2,14 @@
 
 Four calm metrics in the bar. One keyboard-friendly dashboard for everything else.
 
+![SysMon bar](screenshots/SysMon-bar.png)
+![SysMon overview panel](screenshots/SysMon-overview-panel.png)
+
 A lightweight system monitor for the Omarchy desktop shell — CPU, temperature, memory, disk, network, GPU, and processes.
 
 Inspired by [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) by Woogy7, with substantial original work on top.
 
-Screenshots: [screenshots/README.md](screenshots/README.md)
+See all screenshots at [screenshots/README.md](screenshots/README.md).
 
 ## Features
 
@@ -18,13 +21,22 @@ Screenshots: [screenshots/README.md](screenshots/README.md)
 
 ### Panel dashboard
 
-- **7 tabs:** CPU, Temp, Mem, Disk, Net, GPU, and Process — loaded lazily via `Loader`; only the active tab runs delegates
+- **Overview hub** (default): system health, load, CPU/memory/temp/disk/net/GPU glance, top processes
+- **Main tabs:** Overview, CPU, Temps, Memory, Disks, GPU (when detected) — loaded lazily via `Loader`
+- **Sub-pages from Overview:** Network and Processes (full detail views with ← Back)
 - **On-demand collector:** `collector.py` starts when the panel opens, emits one JSON snapshot per line, and stops on close
 - **History views:** Sparklines for CPU, temperature, network throughput, and GPU activity
 - **Memory ring:** `MemRing.qml` visualization with used/free/cache/swap breakdown
 - **Reusable components:** Shared rows, meters, sparklines, action pills, and headers in `components/`
 - **Formatting helpers:** `Model.js` for bytes, rates, temperatures, and process sort/filter logic
 - **Settings:** `refreshSeconds` (1–10 s) controls collector sample interval
+
+### Overview
+
+- Collapsible hero: hostname, uptime, headline metric for active view
+- At-a-glance cards for CPU, memory, temperature, disk, network, and GPU
+- Top processes preview with CPU/RAM sort; links open full Process sub-page
+- Network section opens full Network sub-page
 
 ### Disk tab
 
@@ -41,15 +53,18 @@ Screenshots: [screenshots/README.md](screenshots/README.md)
 - Intel and AMD metrics from sysfs (utilization, frequency, memory, temperature, power)
 - NVIDIA metrics via `nvidia-smi` when the proprietary driver is present
 
-### Process tab
+### Process sub-page
 
 - Sortable, filterable process table with keyboard cursor navigation
 - Detail cards, terminate/kill confirmation, and pause/resume signal actions
+- Reached from Overview → Top Processes or View all
 
 ### Navigation and integration
 
-- Arrow keys, number-key tab jumps (`1`–`7`), process shortcuts, and Escape that unwinds detail → filter → panel
-- IPC handler exposes `showTab(key)` for shell hotkeys (see table below)
+- Arrow keys and number keys (`1`–`6`): switch main tabs (Overview, CPU, Temps, Memory, Disks, GPU)
+- Bar pills open CPU, Memory, Temps, or Disks directly
+- Escape unwinds process detail → filter → sub-page back → panel close
+- IPC `showTab(key)` accepts `overview`, `cpu`, `temp`, `mem`, `disk`, `gpu` (see table below)
 - Temperature bands, fan rows, and clickable GPU/NVMe device links in the Temp tab
 
 ## Requirements
@@ -94,37 +109,36 @@ The bar sampler runs independently in `SysMonCore.qml` every 2 seconds.
 
 ## Tabs
 
-| Tab | Key | Highlights |
-|---|---|---|
+| View | Key / access | Highlights |
+| --- | --- | --- |
+| Overview | `overview` (default) | System health, load, resource glance cards, top processes |
 | CPU | `cpu` | Total/core usage, model/frequency/load details, usage history |
-| Temp | `temp` | Core temps, thermal bands, fan/device rows, GPU/NVMe links |
-| Mem | `mem` | Memory ring, used/free/cache/swap breakdown |
-| Disk | `disk` | Drives, partitions, mounts, SMART, mount actions |
-| Net | `net` | Interface rates, RX/TX history, addresses/stat counters |
+| Temps | `temp` | Core temps, thermal bands, fan/device rows, GPU/NVMe links |
+| Memory | `mem` | Memory ring, used/free/cache/swap breakdown |
+| Disks | `disk` | Drives, partitions, mounts, SMART, mount/unmount actions |
 | GPU | `gpu` | GPU presence, activity, memory/temp where available |
-| Process | `proc` | Sortable/filterable process table with signal actions |
+| Network | Overview → Network | Interface rates, RX/TX history, addresses/stat counters |
+| Processes | Overview → Top Processes | Sortable/filterable process table with signal actions |
 
 ## Hotkeys and Keyboard Navigation
 
 | Key | Action |
-|---|---|
-| Left/Right | Switch dashboard tabs |
-| Number keys `1`-`7` | Jump to CPU, Temp, Mem, Disk, Net, GPU, Process |
-| Up/Down | Scroll current tab, or move the process cursor in Process tab |
-| Enter | Activate the highlighted process row detail |
+| --- | --- |
+| Left/Right | Switch main dashboard tabs |
+| Number keys `1`–`6` | Jump to Overview, CPU, Temps, Memory, Disks, GPU |
+| Up/Down | Scroll current tab, or move process cursor on Process sub-page |
+| Enter | Activate highlighted process row detail |
 | Delete | Request terminate for highlighted process |
-| Escape | Close process detail, clear filter, or close the panel |
-| `s` / `S` in Process | Cycle sort column forward/back |
-| `r` in Process | Reverse sort direction |
-| `/` or `f` in Process | Focus process filter |
-| `g` / `G` in Process | Jump to top/bottom |
+| Escape | Close process detail, clear filter, go back from sub-page, or close panel |
+| `s` / `S` on Process sub-page | Cycle sort column forward/back |
+| `r` on Process sub-page | Reverse sort direction |
+| `/` or `f` on Process sub-page | Focus process filter |
+| `g` / `G` on Process sub-page | Jump to top/bottom |
 | `SUPER CTRL V` | Open CPU tab |
 | `SUPER CTRL B` | Open Memory tab |
-| `SUPER CTRL T` | Open Temperature tab |
-| `SUPER CTRL D` | Open Disk tab |
-| `SUPER CTRL N` | Open Network tab |
+| `SUPER CTRL T` | Open Temps tab |
+| `SUPER CTRL D` | Open Disks tab |
 | `SUPER CTRL G` | Open GPU tab |
-| `SUPER CTRL P` | Open Process tab |
 
 ## Architecture
 
@@ -132,8 +146,8 @@ The bar sampler runs independently in `SysMonCore.qml` every 2 seconds.
 - `SysMonCore.qml` samples lightweight bar data from `/proc` and `/sys`.
 - `Panel.qml` starts `collector.py --interval <refreshSeconds>` only while open.
 - `collector.py` emits one JSON snapshot per line.
-- `Panel.qml` stores the latest snapshot, updates history arrays, and exposes data/action helpers to the active tab.
-- `tabs/*.qml` contain the seven tab bodies.
+- `Panel.qml` stores the latest snapshot, updates history arrays, and exposes data/action helpers to the active tab or sub-page.
+- Overview UI lives inline in `Panel.qml`; dedicated tab bodies live in `tabs/*.qml`.
 - `components/*.qml` contain reusable rows, meters, sparklines, action pills, headers, and shared layout helpers.
 
 ## Debugging

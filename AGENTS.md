@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-Bar widget + tabbed popup panel: CPU, Temp, Mem, Disk, Net, GPU, Process.
+Bar widget + tabbed popup panel: Overview, CPU, Temps, Memory, Disks, GPU, plus Network/Process sub-pages from Overview.
 Bar shows four live glance metrics; the panel collects richer data via `collector.py` only while open.
 
 ## Files
@@ -12,7 +12,7 @@ Bar shows four live glance metrics; the panel collects richer data via `collecto
 | `manifest.json` | Plugin metadata and settings schema (`refreshSeconds`) |
 | `SysMon.qml` | Bar widget entry point with CPU, memory, temperature, and disk pills |
 | `SysMonCore.qml` | Lightweight bar sampler using `/proc` and `/sys` |
-| `Panel.qml` | Panel shell: collector process, IPC, keyboard navigation, history, SMART, mount/process actions, tab loaders |
+| `Panel.qml` | Panel shell: collector process, IPC, keyboard navigation, history, SMART, mount/process actions, Overview UI, tab/sub-page loaders |
 | `tabs/` | Current tab bodies: `CpuTab`, `TempTab`, `MemTab`, `DiskTab`, `NetTab`, `GpuTab`, `ProcTab` |
 | `components/` | Reusable QML components: rows, meters, sparklines, pills, headers, confirm dialog helpers |
 | `MemRing.qml` | Memory ring (QtQuick Shapes, `preferredRendererType: Shape.CurveRenderer`) |
@@ -32,39 +32,38 @@ python3 collector.py --interval <refreshSeconds>
 
 `collector.py` emits one JSON snapshot per line. `Panel.qml` parses each line into `root.snapshot`, updates histories, and feeds the selected tab.
 
-**Tabs:** the active system is a 7-tab dashboard:
+**Tabs:** the active system uses an Overview-first layout:
 
-1. CPU
-2. Temp
-3. Mem
-4. Disk
-5. Net
-6. GPU
-7. Process
+1. Overview (default hub; inline in `Panel.qml`)
+2. CPU
+3. Temps
+4. Memory
+5. Disks
+6. GPU (shown when a GPU is detected, or while waiting for first snapshot)
 
-Each tab body lives in `tabs/*.qml`. `Panel.qml` wraps each imported tab in a `Component` and instantiates only the selected one through a `Loader`, so hidden tabs do not run delegates every sample. Switching goes through `selectTab(index)` or `showTab(key)`.
+**Sub-pages** (from Overview, with ← Back): Network (`NetTab.qml`), Processes (`ProcTab.qml`).
+
+Each dedicated tab body lives in `tabs/*.qml`. `Panel.qml` wraps each in a `Component` and instantiates only the active view through a `Loader`. Switching goes through `selectTab(index)`, `showSubPage(page)`, or `showTab(key)`.
 
 **Keyboard navigation:**
-- Left/Right or number keys `1`-`7`: switch tabs
-- Up/Down: scroll tabs, or move process cursor in Process tab
-- Escape: close selected process detail, clear filter, or close panel
+- Left/Right or number keys `1`–`6`: switch main tabs
+- Up/Down: scroll current tab, or move process cursor on Process sub-page
+- Escape: close process detail, clear filter, go back from sub-page, or close panel
 - Enter: activate process row detail
 - Delete: request process terminate from cursor
-- Process tab: `s`/`S` cycle sort, `r` reverses sort, `/` or `f` filters, `g`/`G` jump top/bottom
+- Process sub-page: `s`/`S` cycle sort, `r` reverses sort, `/` or `f` filters, `g`/`G` jump top/bottom
 
-**IPC / hotkeys:** `Panel.qml` exposes `showTab(key)` through `IpcHandler`, so shell hotkeys can open a specific tab. Current known bindings:
+**IPC / hotkeys:** `Panel.qml` exposes `showTab(key)` through `IpcHandler`. Keys: `overview`, `cpu`, `temp`, `mem`, `disk`, `gpu`. Network and Processes open from Overview UI (sub-pages). Known shell bindings:
 - `SUPER CTRL V`: CPU
 - `SUPER CTRL B`: Memory
-- `SUPER CTRL T`: Temperature
-- `SUPER CTRL D`: Disk
-- `SUPER CTRL N`: Network
+- `SUPER CTRL T`: Temps
+- `SUPER CTRL D`: Disks
 - `SUPER CTRL G`: GPU
-- `SUPER CTRL P`: Process
 
 **Dedup rules (deliberate):**
 - Core temps grid + fan live in Temp tab only; CPU tab shows core count and CPU-focused metrics
 - GPU/NVMe temps appear as clickable link rows in Temp's DEVICES block
-- Process counts and process actions belong to Process tab
+- Process counts and process actions belong to the Process sub-page
 - Memory ring + header + legend coexist by design (glance vs numbers)
 
 ## Disk Tab

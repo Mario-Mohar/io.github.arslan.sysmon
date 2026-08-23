@@ -4,22 +4,26 @@
 
 Submit the strongest possible Omarchy Plugin Competition entry before the final 9am CEST deadline.
 
-Primary entry: **SysMon**, a polished bar widget plus 7-tab system dashboard.
+Primary entry: **SysMon**, a polished bar widget plus Overview-first system dashboard.
 
 ## Current status
 
-SysMon is no longer a broken 4-panel prototype. The current build has:
+The current build has:
 
-- Four live bar metrics: CPU, memory, temperature, disk.
-- A working 7-tab dashboard: CPU, Temp, Mem, Disk, Net, GPU, Process.
-- Keyboard navigation across tabs and within the Process tab.
+- Four live bar metrics: CPU, memory, temperature, disk (transparent pill backgrounds).
+- Overview hub with system health glance, top processes, and drill-down sub-pages.
+- Main tabs: Overview, CPU, Temps, Memory, Disks, GPU.
+- Network and Process sub-pages from Overview.
+- Keyboard navigation across tabs and within the Process sub-page.
 - Sparklines/history for live trends.
 - Python collector that runs only while the panel is open.
 - SMART disk health/details with install prompt for `smartmontools`.
 - Physical drives plus mounted filesystems and unmounted partitions.
-- Mount action for supported unmounted partitions.
+- Mount and unmount actions for supported partitions.
 - Process sorting, filtering, detail cards, and signal actions with confirmation for destructive operations.
-- Reusable `tabs/` and `components/` architecture instead of the old monolithic panel/panel-stub plan.
+- Reusable `tabs/` and `components/` architecture.
+- Screenshots in `screenshots/`; marketplace preview at `preview.png`.
+- LICENSE, install/remove docs, and `omarchy plugin validate .` passing.
 
 ## Positioning
 
@@ -30,7 +34,7 @@ SysMon should be presented as a daily-driver system monitor for Omarchy:
 Key differentiators:
 
 1. **Better glance value:** The bar communicates four useful system states without opening a panel.
-2. **Focused depth:** The popup opens directly to CPU, Memory, Temp, Disk, Network, GPU, or Process.
+2. **Focused depth:** Overview at a glance; dedicated tabs for CPU, Temps, Memory, Disks, GPU; Network and Processes as sub-pages.
 3. **Keyboard-first polish:** Arrow keys, number-key tab jumps, process cursor, sort/filter shortcuts, and safe Escape behavior.
 4. **Practical disk tooling:** Physical drives, unmounted partitions, mount action, SMART checks, and NVMe health percentage.
 5. **Resource-conscious design:** Heavy collection only runs while the panel is open; hidden tabs are not instantiated.
@@ -41,7 +45,7 @@ Key differentiators:
 | Feature | Typical vitals-style plugin | SysMon |
 |---|---|---|
 | Bar display | Often one icon or compact status | Four metric pills: CPU, Mem, Temp, Disk |
-| Dashboard coverage | CPU/Mem/Disk/Net/GPU/Proc varies by plugin | CPU, Temp, Mem, Disk, Net, GPU, Process |
+| Dashboard coverage | CPU/Mem/Disk/Net/GPU/Proc varies by plugin | Overview hub + CPU, Temps, Memory, Disks, GPU + Net/Proc sub-pages |
 | Data collection | Background or panel collector | Lightweight bar sampler plus on-demand panel collector |
 | Keyboard navigation | Often partial | Full tab nav plus Process shortcuts |
 | Sparklines/history | Often available | CPU, Temp, Net, GPU histories |
@@ -51,8 +55,8 @@ Key differentiators:
 
 ## Submission checklist
 
-- [ ] README accurately describes 7 tabs, hotkeys, collector, SMART, mount, and process actions.
-- [ ] `manifest.json` metadata is current and versioned.
+- [x] README accurately describes tabs, sub-pages, hotkeys, collector, SMART, mount, and process actions.
+- [x] `manifest.json` metadata is current and versioned.
 - [ ] Run collector smoke test:
 
   ```bash
@@ -71,14 +75,10 @@ Key differentiators:
   journalctl --user --since '10 min ago' | grep -iE 'qml|sysmon|io.github.arslan.sysmon'
   ```
 
-- [ ] Capture screenshots or GIFs showing:
-  - bar pills,
-  - full 7-tab dashboard,
-  - Disk tab with drives/partitions/SMART,
-  - Process tab with filter/sort/detail actions,
-  - keyboard tab switching if using video.
-- [ ] Validate plugin with Omarchy tooling if available.
-- [ ] Tag or commit final competition-ready version.
+- [x] Capture screenshots showing bar pills, Overview, Disk/SMART, and Process sub-page.
+- [x] Validate plugin with Omarchy tooling.
+- [ ] Public GitHub repo pushed and marketplace form submitted.
+- [ ] Tag final competition-ready version.
 
 ## Plugin 2
 
