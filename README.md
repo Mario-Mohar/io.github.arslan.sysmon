@@ -11,6 +11,43 @@ Inspired by [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) by Woogy7
 
 See all screenshots at [screenshots/README.md](screenshots/README.md).
 
+## Install
+
+```bash
+omarchy plugin add io.github.arslan.sysmon --enable
+```
+
+Or from git once published:
+
+```bash
+omarchy plugin add https://github.com/<your-user>/io.github.arslan.sysmon --enable
+```
+
+Then place it on the bar with `omarchy bar move` if needed (defaults to the right section).
+
+## Remove
+
+```bash
+omarchy plugin remove io.github.arslan.sysmon
+```
+
+## Configure
+
+`omarchy bar` → SysMon widget settings:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `refreshSeconds` | `1` | Panel collector sample interval, 1–10 s (clamped in `Panel.qml`) |
+
+Only affects `collector.py` while the panel is open. The bar sampler in `SysMonCore.qml` is fixed at 2 seconds and is not configurable.
+
+## Requirements
+
+- Omarchy 4.0+ (Quattro)
+- Quickshell with `qs.Ui` and `Quickshell.Io`
+- Python 3 for the panel collector
+- Optional: `smartmontools` for SMART disk health checks. The panel can offer installation through `pkexec pacman` when missing.
+
 ## Features
 
 ### Bar widget
@@ -66,46 +103,6 @@ See all screenshots at [screenshots/README.md](screenshots/README.md).
 - Escape unwinds process detail → filter → sub-page back → panel close
 - IPC `showTab(key)` accepts `overview`, `cpu`, `temp`, `mem`, `disk`, `gpu` (see table below)
 - Temperature bands, fan rows, and clickable GPU/NVMe device links in the Temp tab
-
-## Requirements
-
-- Omarchy 4.0+ (Quattro)
-- Quickshell with `qs.Ui` and `Quickshell.Io`
-- Python 3 for the panel collector
-- Optional: `smartmontools` for SMART disk health checks. The panel can offer installation through `pkexec pacman` when missing.
-
-## Install
-
-```bash
-omarchy plugin add io.github.arslan.sysmon --enable
-```
-
-Or from a git URL once published:
-
-```bash
-omarchy plugin add https://github.com/<your-user>/io.github.arslan.sysmon --enable
-```
-
-## Remove
-
-```bash
-omarchy plugin remove io.github.arslan.sysmon
-```
-
-## Configure
-
-The plugin exposes `refreshSeconds`, which controls the panel collector interval and is clamped from 1 to 10 seconds.
-
-```json
-{
-  "modules": ["io.github.arslan.sysmon"],
-  "settings": {
-    "refreshSeconds": 1
-  }
-}
-```
-
-The bar sampler runs independently in `SysMonCore.qml` every 2 seconds.
 
 ## Tabs
 
