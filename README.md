@@ -6,13 +6,7 @@ A lightweight system monitor for the Omarchy desktop shell — CPU, temperature,
 
 Inspired by [omarchy-vitals](https://github.com/Woogy7/omarchy-vitals) by Woogy7, with substantial original work on top.
 
-## Screenshots
-
-![Bar pills](screenshots/SysMon-bar.png)
-
-![Overview panel](screenshots/SysMon-overview-panel.png)
-
-Full gallery (CPU, Temps, Memory, Disks, SMART, GPU, Network, Processes): [screenshots/README.md](screenshots/README.md)
+Screenshots: [screenshots/README.md](screenshots/README.md)
 
 ## Features
 
@@ -57,8 +51,6 @@ Full gallery (CPU, Temps, Memory, Disks, SMART, GPU, Network, Processes): [scree
 - Arrow keys, number-key tab jumps (`1`–`7`), process shortcuts, and Escape that unwinds detail → filter → panel
 - IPC handler exposes `showTab(key)` for shell hotkeys (see table below)
 - Temperature bands, fan rows, and clickable GPU/NVMe device links in the Temp tab
-
-See [screenshots/README.md](screenshots/README.md) for the full UI gallery.
 
 ## Requirements
 
