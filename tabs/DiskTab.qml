@@ -69,6 +69,7 @@ Column {
     color: "#ff9933"
     font.family: panel.fontFamily
     font.pixelSize: Style.font.caption
+    textFormat: Text.PlainText
     wrapMode: Text.WrapAnywhere
   }
 
@@ -532,6 +533,7 @@ Column {
           font.family: panel.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true
+          textFormat: Text.PlainText
         }
 
         Repeater {
@@ -549,6 +551,7 @@ Column {
               color: panel.dim
               font.family: panel.fontFamily
               font.pixelSize: Style.font.caption
+              textFormat: Text.PlainText
               elide: Text.ElideRight
             }
 
@@ -557,6 +560,7 @@ Column {
               color: panel.foreground
               font.family: panel.fontFamily
               font.pixelSize: Style.font.caption
+              textFormat: Text.PlainText
               elide: Text.ElideRight
             }
           }

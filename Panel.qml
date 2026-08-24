@@ -206,12 +206,30 @@ Panel {
   property bool mountBusy: false
   property string mountErr: ""
   property string lastMountDev: ""
+  property int mountStep: 0
+  property string pendingMountDev: ""
+  property string pendingMountPath: ""
 
   Process {
     id: mountProc
     stdout: StdioCollector { }
     stderr: StdioCollector { onStreamFinished: root.mountErr = this.text.trim() }
     onExited: {
+      if (root.mountStep === 1) {
+        root.mountStep = 0
+        if (this.exitCode !== 0) {
+          mountTimeoutTimer.stop()
+          root.mountBusy = false
+          if (root.mountErr === "")
+            root.mountErr = "Failed to create mount point (exit " + this.exitCode + ")"
+          if (root.mountErr !== "") mountErrTimer.restart()
+          return
+        }
+        root.mountErr = ""
+        root.mountProc.command = ["pkexec", "mount", root.pendingMountDev, root.pendingMountPath]
+        root.mountProc.running = true
+        return
+      }
       mountTimeoutTimer.stop()
       root.mountBusy = false
       if (this.exitCode !== 0) {
@@ -238,11 +256,20 @@ Panel {
     root.mountErr = ""
     root.mountBusy = true
     if (mountPath && mountPath !== "") {
-      mountProc.command = ["bash", "-c", "pkexec mkdir -p " + mountPath + " && pkexec mount " + dev + " " + mountPath]
+      if (!/^\/[a-zA-Z0-9_\-\/]+$/.test(dev) || !/^\/[a-zA-Z0-9_\-\/]*$/.test(mountPath)) {
+        root.mountBusy = false
+        root.mountErr = "Invalid device or mount path"
+        return
+      }
+      root.pendingMountDev = dev
+      root.pendingMountPath = mountPath
+      root.mountStep = 1
+      root.mountProc.command = ["pkexec", "mkdir", "-p", mountPath]
+      root.mountProc.running = true
     } else {
       mountProc.command = ["udisksctl", "mount", "-b", dev]
+      mountProc.running = true
     }
-    mountProc.running = true
     mountTimeoutTimer.restart()
   }
 
