@@ -24,6 +24,7 @@ Item {
     anchors.right: root.alignRight ? parent.right : undefined
     anchors.rightMargin: Style.space(6)
     text: root.text.toUpperCase() + (root.activeSort ? (root.sortReverse ? " ▲" : " ▼") : "")
+    textFormat: Text.PlainText
     color: root.activeSort || headerHover.containsMouse ? root.foreground : root.faint
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption

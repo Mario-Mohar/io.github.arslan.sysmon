@@ -17,6 +17,7 @@ Item {
   Text {
     id: sectionLabel
     text: root.label
+    textFormat: Text.PlainText
     color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.body
@@ -30,6 +31,7 @@ Item {
   Text {
     id: sectionValue
     text: root.value
+    textFormat: Text.PlainText
     color: root.valueDim ? root.dim : root.foreground
     font.family: root.fontFamily
     font.pixelSize: root.valueDim ? Style.font.caption : Style.font.body

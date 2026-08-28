@@ -1,7 +1,7 @@
 import QtQuick
 import qs.Ui
 import qs.Commons
-import "format.js" as Fmt
+import "Model.js" as Model
 
 BarWidget {
   id: root
@@ -125,7 +125,7 @@ BarWidget {
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
-        tooltipText: snap && snap.mem ? Fmt.bytes(snap.mem.used) + " / " + Fmt.bytes(snap.mem.total) : Fmt.bytes(sys.memUsed) + " / " + Fmt.bytes(sys.memTotal)
+        tooltipText: snap && snap.mem ? Model.bytes(snap.mem.used) + " / " + Model.bytes(snap.mem.total) : Model.bytes(sys.memUsed) + " / " + Model.bytes(sys.memTotal)
         onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("mem") }
       }
     }
@@ -163,7 +163,7 @@ BarWidget {
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
-        tooltipText: snap && snap.disk ? Fmt.bytes(snap.disk.used) + " / " + Fmt.bytes(snap.disk.total) : Fmt.bytes(sys.diskUsed) + " / " + Fmt.bytes(sys.diskTotal)
+        tooltipText: snap && snap.disk ? Model.bytes(snap.disk.used) + " / " + Model.bytes(snap.disk.total) : Model.bytes(sys.diskUsed) + " / " + Model.bytes(sys.diskTotal)
         onPressed: function(b) { if (b === Qt.LeftButton) root.openTab("disk") }
       }
     }

@@ -49,6 +49,7 @@ Column {
     Text {
       anchors.verticalCenter: parent.verticalCenter
       text: panel.currentTempBand >= 0 ? "Thermal status \u00B7 " + panel.tempBands[panel.currentTempBand].label : ""
+      textFormat: Text.PlainText
       color: panel.dim
       font.family: panel.fontFamily
       font.pixelSize: Style.font.caption
@@ -76,6 +77,7 @@ Column {
 
         Text {
           text: modelData.l
+          textFormat: Text.PlainText
           color: panel.dim
           font.family: panel.fontFamily
           font.pixelSize: Style.font.caption
@@ -83,6 +85,7 @@ Column {
 
         Text {
           text: modelData.v
+          textFormat: Text.PlainText
           color: modelData.band && panel.currentTempBand >= 0 ? panel.tempBands[panel.currentTempBand].color : panel.foreground
           font.family: panel.fontFamily
           font.pixelSize: Style.font.caption
@@ -126,6 +129,7 @@ Column {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         text: modelData.label
+        textFormat: Text.PlainText
         color: panel.dim
         font.family: panel.fontFamily
         font.pixelSize: Style.font.caption
@@ -136,6 +140,7 @@ Column {
         anchors.rightMargin: Style.space(10)
         anchors.verticalCenter: parent.verticalCenter
         text: modelData.value
+        textFormat: Text.PlainText
         color: panel.foreground
         font.family: panel.fontFamily
         font.pixelSize: Style.font.caption
@@ -146,6 +151,7 @@ Column {
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         text: "\u2192 " + modelData.target
+        textFormat: Text.PlainText
         color: panel.dim
         opacity: devArea.containsMouse ? 1 : 0.55
         font.family: panel.fontFamily
@@ -166,6 +172,7 @@ Column {
     visible: (panel.gpus || []).length === 0 && !(panel.snapshot && panel.snapshot.nvme_temp !== null && panel.snapshot.nvme_temp !== undefined)
     width: parent.width
     text: "No device sensors detected"
+    textFormat: Text.PlainText
     color: panel.dim
     font.family: panel.fontFamily
     font.pixelSize: Style.font.caption
@@ -175,6 +182,7 @@ Column {
     width: parent.width
     horizontalAlignment: Text.AlignRight
     text: (panel.cpu && panel.cpu.temp_source ? panel.cpu.temp_source : "hwmon") + " \u00B7 every " + panel.refreshSeconds + "s \u00B7 window " + panel.historyLength + " samples"
+    textFormat: Text.PlainText
     color: panel.dim
     opacity: 0.7
     font.family: panel.fontFamily

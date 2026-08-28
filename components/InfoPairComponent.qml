@@ -15,6 +15,7 @@ Row {
   Text {
     id: pairLabel
     text: root.label
+    textFormat: Text.PlainText
     color: root.foreground
     opacity: 0.6
     font.family: root.fontFamily
@@ -29,6 +30,7 @@ Row {
   Text {
     id: pairValue
     text: root.value
+    textFormat: Text.PlainText
     color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall

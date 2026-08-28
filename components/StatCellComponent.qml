@@ -13,6 +13,7 @@ Column {
 
   Text {
     text: root.caption
+    textFormat: Text.PlainText
     color: root.dim
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
@@ -20,6 +21,7 @@ Column {
   }
   Text {
     text: root.value
+    textFormat: Text.PlainText
     color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.subtitle

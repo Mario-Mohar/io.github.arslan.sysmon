@@ -104,6 +104,7 @@ Item {
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       text: Math.round(ring.clampedUsed * 100) + "%"
+      textFormat: Text.PlainText
       color: ring.textColor
       font.family: ring.fontFamily
       font.pixelSize: ring.size * 0.19
@@ -113,6 +114,7 @@ Item {
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       text: "RAM"
+      textFormat: Text.PlainText
       color: ring.dimColor
       font.family: ring.fontFamily
       font.pixelSize: ring.size * 0.085

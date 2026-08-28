@@ -71,6 +71,7 @@ Column {
           Text {
             anchors.verticalCenter: parent.verticalCenter
             text: modelData.l
+            textFormat: Text.PlainText
             color: panel.dim
             font.family: panel.fontFamily
             font.pixelSize: Style.font.caption
@@ -80,6 +81,7 @@ Column {
           Text {
             anchors.verticalCenter: parent.verticalCenter
             text: modelData.v
+            textFormat: Text.PlainText
             color: modelData.strong ? panel.foreground : panel.dim
             font.family: panel.fontFamily
             font.pixelSize: Style.font.caption

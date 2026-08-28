@@ -30,6 +30,7 @@ Column {
   Text {
     visible: panel.hasData && panel.ifaces.length === 0
     text: "No network interfaces found"
+    textFormat: Text.PlainText
     color: panel.dim
     font.family: panel.fontFamily
     font.pixelSize: Style.font.bodySmall
@@ -112,18 +113,19 @@ Column {
       Row {
         spacing: Style.space(6)
         Rectangle { width: Style.space(10); height: 2; radius: 1; color: panel.foreground; anchors.verticalCenter: parent.verticalCenter }
-        Text { text: "download"; color: panel.dim; font.family: panel.fontFamily; font.pixelSize: Style.font.caption }
+        Text { text: "download"; textFormat: Text.PlainText; color: panel.dim; font.family: panel.fontFamily; font.pixelSize: Style.font.caption }
       }
       Row {
         spacing: Style.space(6)
         Rectangle { width: Style.space(10); height: 2; radius: 1; color: panel.alpha(panel.foreground, 0.45); anchors.verticalCenter: parent.verticalCenter }
-        Text { text: "upload"; color: panel.dim; font.family: panel.fontFamily; font.pixelSize: Style.font.caption }
+        Text { text: "upload"; textFormat: Text.PlainText; color: panel.dim; font.family: panel.fontFamily; font.pixelSize: Style.font.caption }
       }
     }
 
     Text {
       anchors.right: parent.right
       text: "peak " + Model.rate(Math.max(Model.maxOf(panel.rxHistory, 0), Model.maxOf(panel.txHistory, 0)))
+      textFormat: Text.PlainText
       color: panel.dim
       font.family: panel.fontFamily
       font.pixelSize: Style.font.caption
@@ -150,6 +152,7 @@ Column {
         Text {
           id: otherName
           text: modelData.name + (modelData.ip ? "  " + modelData.ip : "")
+          textFormat: Text.PlainText
           color: modelData.up ? panel.foreground : panel.dim
           opacity: modelData.up ? 0.75 : 1
           font.family: panel.fontFamily
@@ -159,6 +162,7 @@ Column {
         }
         Text {
           text: modelData.up ? "󰇚 " + Model.rate(modelData.rx_bps) + "   󰕒 " + Model.rate(modelData.tx_bps) : "down"
+          textFormat: Text.PlainText
           color: panel.dim
           font.family: panel.fontFamily
           font.pixelSize: Style.font.caption

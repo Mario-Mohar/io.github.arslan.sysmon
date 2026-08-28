@@ -29,6 +29,7 @@ Item {
   Text {
     id: headingName
     text: root.title
+    textFormat: Text.PlainText
     color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: root.titleSize
@@ -43,6 +44,7 @@ Item {
   Text {
     id: headingMeta
     text: root.meta
+    textFormat: Text.PlainText
     color: root.dim
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption

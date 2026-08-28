@@ -34,6 +34,7 @@ Column {
   Text {
     visible: panel.hasData && panel.gpus.length === 0
     text: "No GPU detected"
+    textFormat: Text.PlainText
     color: panel.dim
     font.family: panel.fontFamily
     font.pixelSize: Style.font.bodySmall

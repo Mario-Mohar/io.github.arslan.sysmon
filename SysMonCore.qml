@@ -151,7 +151,7 @@ QtObject {
       if (!nameDone) {
         var mName = lines[i].match(/model name\s*:\s*(.+)/)
         if (mName) {
-          cpuModelName = mName[1].trim()
+          cpuModelName = mName[1].trim().substring(0, 120)
           nameDone = true
         }
       }

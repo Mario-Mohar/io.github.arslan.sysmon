@@ -24,6 +24,7 @@ Item {
   Text {
     id: shareLabel
     text: root.label
+    textFormat: Text.PlainText
     color: root.strong ? root.foreground : root.dim
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
@@ -56,6 +57,7 @@ Item {
   Text {
     id: shareValue
     text: Model.bytes(root.amount)
+    textFormat: Text.PlainText
     color: root.strong ? root.foreground : root.dim
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption

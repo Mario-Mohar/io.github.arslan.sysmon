@@ -47,6 +47,7 @@ Column {
             ? Model.count(panel.sortedProcs.length) + " OF " + Model.count(panel.processes.length) + " PROCESSES"
             : Model.count(panel.snapshot.procs.total) + " PROCESSES  ·  " + Model.count(panel.snapshot.procs.threads) + " THREADS")
         : ""
+      textFormat: Text.PlainText
       color: panel.faint
       font.family: panel.fontFamily
       font.pixelSize: Style.font.caption
@@ -145,6 +146,7 @@ Column {
 
         Text {
           text: procRow.model.name
+          textFormat: Text.PlainText
           color: panel.foreground
           font.family: panel.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -159,6 +161,7 @@ Column {
         Text {
           id: cellPid
           text: procRow.model.pid
+          textFormat: Text.PlainText
           color: panel.dim
           font.family: panel.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -171,6 +174,7 @@ Column {
         Text {
           id: cellUser
           text: procRow.model.user
+          textFormat: Text.PlainText
           color: panel.dim
           font.family: panel.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -183,6 +187,7 @@ Column {
         Text {
           id: cellMem
           text: Model.bytesShort(procRow.model.mem)
+          textFormat: Text.PlainText
           color: panel.sortKey === "mem" ? panel.foreground : panel.dim
           font.family: panel.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -195,6 +200,7 @@ Column {
         Text {
           id: cellCpu
           text: Model.percent(procRow.model.cpu, 1)
+          textFormat: Text.PlainText
           color: panel.sortKey === "cpu" ? panel.foreground : panel.dim
           font.family: panel.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -241,6 +247,7 @@ Column {
         Text {
           width: parent.width
           text: procRow.model.cmd !== "" ? procRow.model.cmd : "(kernel thread)"
+          textFormat: Text.PlainText
           color: panel.dim
           font.family: panel.fontFamily
           font.pixelSize: Style.font.caption
@@ -254,6 +261,7 @@ Column {
           text: "PID " + procRow.model.pid + "  ·  parent " + procRow.model.ppid + "  ·  " + procRow.model.threads
             + (procRow.model.threads === 1 ? " thread" : " threads") + "  ·  " + Model.bytes(procRow.model.mem)
             + (procRow.paused ? "  ·  paused" : "")
+          textFormat: Text.PlainText
           color: panel.dim
           font.family: panel.fontFamily
           font.pixelSize: Style.font.caption

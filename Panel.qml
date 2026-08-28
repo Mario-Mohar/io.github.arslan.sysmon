@@ -134,6 +134,7 @@ Panel {
   property string smartOut: ""
   property bool smartInstalled: false
   property string smartDev: ""
+  readonly property int smartDeadlineMs: 8000  // 8 s wall-clock deadline
   // Expansion state keyed by partition path — survives delegate rebuilds
   // caused by fresh snapshot arrays every tick.
   property var expandedParts: ({})
@@ -159,149 +160,82 @@ Panel {
 
   Process {
     id: smartProc
-    property string buf: ""
-    stdout: StdioCollector { onStreamFinished: smartProc.buf = this.text }
+    property var _lines: []
+    property int _bytes: 0
+    property int _maxLines: 40
+    property int _maxBytes: 524288  // 512 KiB
+    stdout: SplitParser {
+      onRead: function(line) {
+        if (smartProc._lines.length >= smartProc._maxLines) return
+        var s = String(line || "")
+        if (smartProc._bytes + s.length > smartProc._maxBytes) return
+        smartProc._lines.push(s)
+        smartProc._bytes += s.length
+      }
+    }
     onExited: {
+      smartDeadline.stop()
       if (root.smartState === "installing") {
         if (this.exitCode === 0) { root.smartInstalled = true; root.smartState = "" }
         else root.smartState = "error"
+        smartProc._lines = []
+        smartProc._bytes = 0
         return
       }
-      root.smartOut = smartProc.buf
-      root.smartState = smartProc.buf !== "" ? "done" : "error"
+      root.smartOut = smartProc._lines.join("\n")
+      root.smartState = root.smartOut !== "" ? "done" : "error"
+      smartProc._lines = []
+      smartProc._bytes = 0
+    }
+  }
+
+  Timer {
+    id: smartDeadline
+    interval: root.smartDeadlineMs
+    repeat: false
+    onTriggered: {
+      if (smartProc.running) {
+        smartProc.running = false
+        if (root.smartState === "running") root.smartState = "error"
+      }
     }
   }
 
   function querySmart(index) {
     var d = root.disks[index]
     if (!d || !d.smart_dev || !root.hasSmart) return
-    smartProc.buf = ""
+    smartProc._lines = []
+    smartProc._bytes = 0
     smartOut = ""
     smartIndex = index
     smartDev = ""
     smartState = "running"
     smartProc.command = ["pkexec", "smartctl", "-H", "-A", "-l", "error", "/dev/" + d.smart_dev]
     smartProc.running = true
+    smartDeadline.restart()
   }
 
   function querySmartDev(name) {
     if (!name || !root.hasSmart) return
-    smartProc.buf = ""
+    smartProc._lines = []
+    smartProc._bytes = 0
     smartOut = ""
     smartIndex = -1
     smartDev = name
     smartState = "running"
     smartProc.command = ["pkexec", "smartctl", "-H", "-A", "-l", "error", "/dev/" + name]
     smartProc.running = true
+    smartDeadline.restart()
   }
 
   function installSmart() {
     smartIndex = -1
     smartState = "installing"
-    smartProc.buf = ""
+    smartProc._lines = []
+    smartProc._bytes = 0
     smartProc.command = ["pkexec", "pacman", "-S", "--needed", "--noconfirm", "smartmontools"]
     smartProc.running = true
   }
-
-  property bool mountBusy: false
-  property string mountErr: ""
-  property string lastMountDev: ""
-  property int mountStep: 0
-  property string pendingMountDev: ""
-  property string pendingMountPath: ""
-
-  Process {
-    id: mountProc
-    stdout: StdioCollector { }
-    stderr: StdioCollector { onStreamFinished: root.mountErr = this.text.trim() }
-    onExited: {
-      if (root.mountStep === 1) {
-        root.mountStep = 0
-        if (this.exitCode !== 0) {
-          mountTimeoutTimer.stop()
-          root.mountBusy = false
-          if (root.mountErr === "")
-            root.mountErr = "Failed to create mount point (exit " + this.exitCode + ")"
-          if (root.mountErr !== "") mountErrTimer.restart()
-          return
-        }
-        root.mountErr = ""
-        root.mountProc.command = ["pkexec", "mount", root.pendingMountDev, root.pendingMountPath]
-        root.mountProc.running = true
-        return
-      }
-      mountTimeoutTimer.stop()
-      root.mountBusy = false
-      if (this.exitCode !== 0) {
-        var e = root.mountErr.toLowerCase()
-        if (e.indexOf("superblock") !== -1 || e.indexOf("bad option") !== -1) {
-          root.mountErr = "Bad superblock — try: sudo ntfsfix " + root.lastMountDev
-        } else if (e.indexOf("wrong fs type") !== -1 || e.indexOf("missing codepage") !== -1) {
-          root.mountErr = "Missing filesystem driver — install: sudo pacman -S ntfs-3g"
-        } else if (e.indexOf("already mounted") !== -1) {
-          root.mountErr = "Already mounted"
-        } else if (e.indexOf("no medium") !== -1) {
-          root.mountErr = "No medium found — check device"
-        } else if (root.mountErr === "") {
-          root.mountErr = "Mount failed (exit " + this.exitCode + ")"
-        }
-      }
-      if (root.mountErr !== "") mountErrTimer.restart()
-    }
-  }
-
-  function mountDevice(dev, mountPath) {
-    if (!dev || root.mountBusy) return
-    root.lastMountDev = dev
-    root.mountErr = ""
-    root.mountBusy = true
-    if (mountPath && mountPath !== "") {
-      if (!/^\/[a-zA-Z0-9_\-\/]+$/.test(dev) || !/^\/[a-zA-Z0-9_\-\/]*$/.test(mountPath)) {
-        root.mountBusy = false
-        root.mountErr = "Invalid device or mount path"
-        return
-      }
-      root.pendingMountDev = dev
-      root.pendingMountPath = mountPath
-      root.mountStep = 1
-      root.mountProc.command = ["pkexec", "mkdir", "-p", mountPath]
-      root.mountProc.running = true
-    } else {
-      mountProc.command = ["udisksctl", "mount", "-b", dev]
-      mountProc.running = true
-    }
-    mountTimeoutTimer.restart()
-  }
-
-  function unmountDevice(dev) {
-    if (!dev || root.mountBusy) return
-    root.lastMountDev = dev
-    root.mountErr = ""
-    root.mountBusy = true
-    mountProc.command = ["udisksctl", "unmount", "-b", dev]
-    mountProc.running = true
-    mountTimeoutTimer.restart()
-  }
-
-  Timer {
-    id: mountErrTimer
-    interval: 5000
-    onTriggered: root.mountErr = ""
-  }
-
-  Timer {
-    id: mountTimeoutTimer
-    interval: 15000
-    onTriggered: {
-      if (root.mountBusy) {
-        mountProc.running = false
-        root.mountBusy = false
-        root.mountErr = "Mount timed out"
-      }
-    }
-  }
-
-  onMountErrChanged: { if (mountErr !== "") mountErrTimer.restart() }
 
   function parseSmart(text) {
     var rows = []
@@ -748,6 +682,7 @@ Panel {
                 }
                 Text {
                   text: root.snapshot ? root.snapshot.host : "SysMon"
+                  textFormat: Text.PlainText
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
@@ -766,6 +701,7 @@ Panel {
                     if (!root.snapshot) return ""
                     return root.snapshot.uptime ? ("UP " + Model.uptime(root.snapshot.uptime)) : ""
                   }
+                  textFormat: Text.PlainText
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -781,6 +717,7 @@ Panel {
 
                 Text {
                   text: root.headline
+                  textFormat: Text.PlainText
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.heading
@@ -789,6 +726,7 @@ Panel {
                 }
                 Text {
                   text: root.headlineCaption
+                  textFormat: Text.PlainText
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption - 1
@@ -837,6 +775,7 @@ Panel {
                 }
                 return p.join("  \u00B7  ")
               }
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -896,6 +835,7 @@ Panel {
 
               Text {
                 text: "\u2190 Back"
+                textFormat: Text.PlainText
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -953,6 +893,7 @@ Panel {
           Text {
             id: healthLabel
             text: "SYSTEM HEALTH"
+            textFormat: Text.PlainText
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -962,6 +903,7 @@ Panel {
           }
           Text {
             text: "OK"
+            textFormat: Text.PlainText
             color: "#66ff66"
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -981,6 +923,7 @@ Panel {
             if (root.snapshot.load) p.push("LOAD " + Model.loadAvg(root.snapshot.load))
             return p.join("  \u00B7  ")
           }
+          textFormat: Text.PlainText
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -1002,6 +945,7 @@ Panel {
               Text {
                 id: cpuLabel
                 text: "CPU"
+                textFormat: Text.PlainText
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1021,6 +965,7 @@ Panel {
                     var freq = cpu.freq_mhz ? (" \u00B7 " + Model.mhz(cpu.freq_mhz)) : ""
                     return Model.percent(cpu.total) + freq
                   }
+                  textFormat: Text.PlainText
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -1028,6 +973,7 @@ Panel {
                 }
                 Text {
                   text: "\u2192"
+                  textFormat: Text.PlainText
                   color: "#4da6ff"
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -1075,6 +1021,7 @@ Panel {
               Text {
                 id: memLabel
                 text: "MEMORY"
+                textFormat: Text.PlainText
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1094,6 +1041,7 @@ Panel {
                     var pct = m.total > 0 ? Math.round(m.used * 100 / m.total) : 0
                     return pct + "%  \u00B7  " + Model.bytesShort(m.used) + " / " + Model.bytesShort(m.total)
                   }
+                  textFormat: Text.PlainText
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -1101,6 +1049,7 @@ Panel {
                 }
                 Text {
                   text: "\u2192"
+                  textFormat: Text.PlainText
                   color: "#4da6ff"
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -1144,6 +1093,7 @@ Panel {
 
             Text {
               text: "TEMP"
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1159,6 +1109,7 @@ Panel {
                 var band = root.tempBand(t)
                 return c + "\u00B0" + " \u00B7 " + root.tempBands[band].label
               }
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1166,6 +1117,7 @@ Panel {
             }
             Text {
               text: "\u2192"
+              textFormat: Text.PlainText
               color: "#4da6ff"
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1181,6 +1133,7 @@ Panel {
 
             Text {
               text: "DISK"
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1193,6 +1146,7 @@ Panel {
                 var d = root.snapshot.disks[0]
                 return Model.percent(d.used * 100 / d.total) + " \u00B7 " + Model.bytesShort(d.used) + " / " + Model.bytesShort(d.total)
               }
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1200,6 +1154,7 @@ Panel {
             }
             Text {
               text: "\u2192"
+              textFormat: Text.PlainText
               color: "#4da6ff"
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1238,6 +1193,7 @@ Panel {
 
             Text {
               text: "NETWORK"
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1257,6 +1213,7 @@ Panel {
                 }
                 return "\u2193 " + Model.rate(totalRx) + "  \u2191 " + Model.rate(totalTx)
               }
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1280,6 +1237,7 @@ Panel {
                 }
                 return ""
               }
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1287,6 +1245,7 @@ Panel {
             }
             Text {
               text: "\u2192"
+              textFormat: Text.PlainText
               color: "#4da6ff"
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1315,6 +1274,7 @@ Panel {
 
             Text {
               text: "GPU"
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1329,6 +1289,7 @@ Panel {
                 var temp = g.temp !== null && g.temp !== undefined ? " \u00B7 " + Model.temp(g.temp) : ""
                 return pct + temp
               }
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1336,6 +1297,7 @@ Panel {
             }
             Text {
               text: "\u2192"
+              textFormat: Text.PlainText
               color: "#4da6ff"
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1362,6 +1324,7 @@ Panel {
           Text {
             id: topProcLabel
             text: "TOP PROCESSES"
+            textFormat: Text.PlainText
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -1378,6 +1341,7 @@ Panel {
               // CPU sort toggle
               Text {
                 text: "CPU"
+                textFormat: Text.PlainText
                 color: root.overviewProcSort === "cpu" ? "#4da6ff" : root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1394,6 +1358,7 @@ Panel {
 
               Text {
                 text: "\u00B7"
+                textFormat: Text.PlainText
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1403,6 +1368,7 @@ Panel {
               // RAM sort toggle
               Text {
                 text: "RAM"
+                textFormat: Text.PlainText
                 color: root.overviewProcSort === "ram" ? "#4da6ff" : root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1419,6 +1385,7 @@ Panel {
 
               Text {
                 text: "\u00B7"
+                textFormat: Text.PlainText
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1428,6 +1395,7 @@ Panel {
               // View all link
               Text {
                 text: "View all \u2192"
+                textFormat: Text.PlainText
                 color: "#4da6ff"
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -1463,6 +1431,7 @@ Panel {
             Text {
               id: procName
               text: modelData.name || ""
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1475,6 +1444,7 @@ Panel {
               text: root.overviewProcSort === "ram"
                 ? Model.bytesShort(modelData.mem || 0)
                 : Model.percent(modelData.cpu || 0)
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption

@@ -28,6 +28,27 @@ except (ValueError, OSError):
 
 NCPU = os.cpu_count() or 1
 
+MAX_STR = 120  # conservative ceiling for any externally-derived string
+MAX_SUBPROC = 65536  # 64 KiB ceiling for subprocess stdout/stderr buffers
+
+
+def _trunc(s, n=MAX_STR):
+    """Truncate string to n characters (bytes after encode)."""
+    if s is None:
+        return None
+    s = str(s)
+    return s[:n] if len(s) > n else s
+
+
+def _subproc(cmd, timeout=2):
+    """Run a subprocess with a byte ceiling and return stdout (or '')."""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return (r.stdout or "")[:MAX_SUBPROC]
+    except (subprocess.SubprocessError, OSError):
+        return ""
+
+
 PSEUDO_FS = {
     "tmpfs", "devtmpfs", "sysfs", "proc", "procfs", "cgroup", "cgroup2", "devpts",
     "securityfs", "pstore", "efivarfs", "bpf", "debugfs", "tracefs", "configfs",
@@ -40,7 +61,7 @@ PSEUDO_FS = {
 def read(path, default=None):
     try:
         with open(path) as f:
-            return f.read()
+            return f.read(MAX_SUBPROC)
     except OSError:
         return default
 
@@ -101,8 +122,8 @@ def cpu_model():
             # Drop trailing "@ 3.20GHz" style suffixes.
             if "@" in name:
                 name = name.split("@")[0].strip()
-            return name
-    return read_str("/sys/firmware/devicetree/base/model") or "CPU"
+            return _trunc(name)
+    return _trunc(read_str("/sys/firmware/devicetree/base/model")) or "CPU"
 
 
 def cpu_freqs():
@@ -145,7 +166,7 @@ class Hwmon:
             label = read_str(base + "_label") or os.path.basename(base)
             v = read_int(f)
             if v is not None:
-                out.append((label, v / 1000.0))
+                out.append((_trunc(label, 40), v / 1000.0))
         return out
 
     def fans(self, d):
@@ -157,7 +178,7 @@ class Hwmon:
             label = read_str(base + "_label") or os.path.basename(base)
             v = read_int(f)
             if v is not None:
-                out.append({"label": label, "rpm": v})
+                out.append({"label": _trunc(label, 40), "rpm": v})
         return out
 
     def power_w(self, d):
@@ -233,7 +254,7 @@ def swap_devices():
     for line in read("/proc/swaps", "").splitlines()[1:]:
         parts = line.split()
         if len(parts) >= 3:
-            devs.append({"name": parts[0], "type": parts[1]})
+            devs.append({"name": _trunc(parts[0]), "type": _trunc(parts[1], 20)})
     return devs
 
 
@@ -304,7 +325,7 @@ def block_devices():
         model = None
         candidate = os.path.join(real, "device", "model")
         if os.path.isfile(candidate):
-            model = read_str(candidate)
+            model = _trunc(read_str(candidate))
         usb = "/usb" in real
         transport = ("usb" if usb
                      else "nvme" if name.startswith("nvme")
@@ -326,17 +347,16 @@ def block_devices():
 def lsblk_partitions():
     kids = {}
     try:
-        proc = subprocess.run(["lsblk", "--bytes", "--json", "--output", "NAME,FSTYPE,MOUNTPOINT,SIZE"], capture_output=True, text=True, timeout=2)
-        data = json.loads(proc.stdout or "{}")
+        data = json.loads(_subproc(["lsblk", "--bytes", "--json", "--output", "NAME,FSTYPE,MOUNTPOINT,SIZE"]) or "{}")
     except Exception:
         return kids
     for top in data.get("blockdevices", []):
         arr = []
         for ch in top.get("children", []) or []:
             arr.append({
-                "name": ch.get("name", ""),
-                "fstype": ch.get("fstype"),
-                "mountpoint": ch.get("mountpoint"),
+                "name": _trunc(ch.get("name", ""), 40),
+                "fstype": _trunc(ch.get("fstype"), 20),
+                "mountpoint": _trunc(ch.get("mountpoint")),
                 "bytes": int(ch.get("size") or 0),
             })
         if arr:
@@ -356,7 +376,7 @@ def block_model(dev):
     while p.startswith("/sys/"):
         candidate = os.path.join(p, "device", "model")
         if os.path.isfile(candidate):
-            model = read_str(candidate)
+            model = _trunc(read_str(candidate))
             break
         parent = os.path.dirname(p)
         if parent == p:
@@ -397,9 +417,9 @@ def mounts():
             continue
         dev = dev_for_source(source)
         entry = {
-            "mount": target,
-            "source": source,
-            "fstype": fstype,
+            "mount": _trunc(target),
+            "source": _trunc(source),
+            "fstype": _trunc(fstype, 20),
             "total": total,
             "used": used,
             "free": free,
@@ -439,13 +459,13 @@ def iface_ips():
     if not shutil.which("ip"):
         return ips
     try:
-        out = subprocess.run(["ip", "-4", "-o", "addr"], capture_output=True, text=True, timeout=1).stdout
+        out = _subproc(["ip", "-4", "-o", "addr"], timeout=1)
     except (subprocess.SubprocessError, OSError):
         return ips
     for line in out.splitlines():
         p = line.split()
         if len(p) >= 4 and p[2] == "inet":
-            ips.setdefault(p[1], p[3].split("/")[0])
+            ips.setdefault(_trunc(p[1], 20), _trunc(p[3].split("/")[0], 40))
     return ips
 
 
@@ -456,14 +476,14 @@ def wifi_ssids():
     for d in glob.glob("/sys/class/net/*/wireless"):
         iface = d.split("/")[-2]
         try:
-            out = subprocess.run(["iw", "dev", iface, "link"], capture_output=True, text=True, timeout=1).stdout
+            out = _subproc(["iw", "dev", iface, "link"], timeout=1)
         except (subprocess.SubprocessError, OSError):
             continue
         for line in out.splitlines():
             line = line.strip()
             if line.startswith("SSID:"):
                 raw = line[5:].strip()
-                ssids[iface] = bytes(raw, "utf-8").decode("unicode_escape").encode("latin-1", "ignore").decode("utf-8", "ignore") if chr(92) + "x" in raw else raw
+                ssids[iface] = _trunc(bytes(raw, "utf-8").decode("unicode_escape").encode("latin-1", "ignore").decode("utf-8", "ignore") if chr(92) + "x" in raw else raw)
     return ssids
 
 
@@ -498,7 +518,7 @@ class Gpus:
         if not shutil.which("lspci"):
             return names
         try:
-            out = subprocess.run(["lspci", "-mm"], capture_output=True, text=True, timeout=2).stdout
+            out = _subproc(["lspci", "-mm"])
         except (subprocess.SubprocessError, OSError):
             return names
         for line in out.splitlines():
@@ -522,7 +542,7 @@ class Gpus:
                     name = parts[3]
                     for junk in ("Corporation", "Advanced Micro Devices, Inc.", "[AMD/ATI]"):
                         name = name.replace(junk, "")
-                    names["0000:" + slot if len(slot) == 7 else slot] = " ".join(name.split())
+                    names["0000:" + slot if len(slot) == 7 else slot] = _trunc(" ".join(name.split()))
         return names
 
     def clean_name(self, card):
@@ -598,9 +618,9 @@ class Gpus:
         if not self.nvidia:
             return []
         try:
-            out = subprocess.run(
+            out = _subproc(
                 [self.nvidia, "--query-gpu=name,utilization.gpu,clocks.gr,clocks.max.gr,temperature.gpu,power.draw,memory.used,memory.total",
-                 "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=2).stdout
+                 "--format=csv,noheader,nounits"])
         except (subprocess.SubprocessError, OSError):
             return []
         res = []
@@ -615,7 +635,7 @@ class Gpus:
                 except ValueError:
                     return None
             res.append({
-                "name": p[0], "vendor": "nvidia", "busy": num(p[1]), "freq_mhz": num(p[2]),
+                "name": _trunc(p[0]), "vendor": "nvidia", "busy": num(p[1]), "freq_mhz": num(p[2]),
                 "max_freq_mhz": num(p[3]), "temp": num(p[4]), "power_w": num(p[5]),
                 "mem_used": (num(p[6]) or 0) * 1024 * 1024, "mem_total": (num(p[7]) or 0) * 1024 * 1024,
             })
@@ -715,9 +735,9 @@ class Procs:
                 if base.startswith(comm) and len(base) <= 40:
                     name = base
             procs.append({
-                "pid": pid, "ppid": ppid, "name": name, "user": self.user(st.st_uid),
+                "pid": pid, "ppid": ppid, "name": _trunc(name, 40), "user": _trunc(self.user(st.st_uid), 32),
                 "cpu": round(cpu, 1), "mem": rss, "threads": nthreads, "state": state,
-                "cmd": cmd[:200],
+                "cmd": _trunc(cmd, 200),
             })
         # Forget stale pids.
         self.prev = cur
@@ -744,12 +764,12 @@ def main():
     gpus = Gpus()
     procs = Procs()
     model = cpu_model()
-    host = socket.gethostname()
+    host = _trunc(socket.gethostname())
     coretemp_dev = hwmon.find({"coretemp", "k10temp", "zenpower", "cpu_thermal", "soc_thermal", "cpu-thermal"})
     temp_source = None
     for _name, _d in hwmon.devices:
         if _d == coretemp_dev:
-            temp_source = _name
+            temp_source = _trunc(_name, 40)
             break
     # Prefer the hwmon that labels its fans (asus, thinkpad, dell...) over a
     # bare acpi_fan entry, then the one with the most fans.
@@ -848,7 +868,7 @@ def main():
             oper = read_str(f"/sys/class/net/{name}/operstate") or "unknown"
             prx, ptx = prev_net.get(name, (rx, tx))
             ifaces.append({
-                "name": name,
+                "name": _trunc(name, 20),
                 "up": oper == "up" or (oper == "unknown" and rx > 0),
                 "ip": ips.get(name),
                 "wireless": os.path.isdir(f"/sys/class/net/{name}/wireless"),
@@ -872,7 +892,7 @@ def main():
         snap = {
             "t": time.time(),
             "host": host,
-            "kernel": read_str("/proc/sys/kernel/osrelease"),
+            "kernel": _trunc(read_str("/proc/sys/kernel/osrelease")),
             "uptime": float(up),
             "load": [float(x) for x in load[:3]],
             "ncpu": NCPU,

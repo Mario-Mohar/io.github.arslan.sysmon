@@ -12,7 +12,7 @@ Bar shows four live glance metrics; the panel collects richer data via `collecto
 | `manifest.json` | Plugin metadata and settings schema (`refreshSeconds`) |
 | `SysMon.qml` | Bar widget entry point with CPU, memory, temperature, and disk pills |
 | `SysMonCore.qml` | Lightweight bar sampler using `/proc` and `/sys` |
-| `Panel.qml` | Panel shell: collector process, IPC, keyboard navigation, history, SMART, mount/process actions, Overview UI, tab/sub-page loaders |
+| `Panel.qml` | Panel shell: collector process, IPC, keyboard navigation, history, SMART, process actions, Overview UI, tab/sub-page loaders |
 | `tabs/` | Current tab bodies: `CpuTab`, `TempTab`, `MemTab`, `DiskTab`, `NetTab`, `GpuTab`, `ProcTab` |
 | `components/` | Reusable QML components: rows, meters, sparklines, pills, headers, confirm dialog helpers |
 | `MemRing.qml` | Memory ring (QtQuick Shapes, `preferredRendererType: Shape.CurveRenderer`) |
@@ -71,7 +71,6 @@ Each dedicated tab body lives in `tabs/*.qml`. `Panel.qml` wraps each in a `Comp
 - **DRIVES**: all physical block devices from `snapshot.blockdevs` (sysfs/lsblk backed, partitions excluded from the drive list), with transport glyphs: NVMe `\uF01A0`, HDD/SATA `\uF02CA`, USB `\uF08EB`; amber accent when removable
 - Child partitions are rendered under their parent drive, including unmounted partitions discovered from block metadata
 - Mounted filesystems get usage gauge cards and per-mount **SMART** actions
-- Unmounted partitions can be mounted through the panel mount action when supported by the system
 - Unmounted whole drives still get their own card and SMART access through `querySmartDev(name)`
 - Index-based `querySmart(index)` and device-based `querySmartDev(name)` share `smartOut`/`smartState`, keyed by `smartIndex >= 0` or `smartDev !== ""`
 - SMART runs through `pkexec smartctl`; if `smartmontools` is missing, the panel offers install via `pkexec pacman -S --needed --noconfirm smartmontools`
