@@ -120,7 +120,7 @@ BarWidget {
         id: cpuBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(root.cpuPercent, "#4da6ff") + "'>\u{F035B}</font> <font color='" + textColor(root.cpuPercent) + "'>" + root.cpuFreqText + " (" + Math.round(root.cpuPercent) + "%)</font>"
+        text: "\u{F035B} " + root.cpuFreqText + " (" + Math.round(root.cpuPercent) + "%)"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
@@ -139,7 +139,7 @@ BarWidget {
         id: memBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(root.memPercent, "#66ff66") + "'>\u{F046D}</font> <font color='" + textColor(root.memPercent) + "'>" + Math.round(root.memPercent) + "%</font>"
+        text: "\u{F046D} " + Math.round(root.memPercent) + "%"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
@@ -158,7 +158,7 @@ BarWidget {
         id: tempBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(root.tempC, root.tempC >= 50 ? "#ff9933" : "#4da6ff") + "'>" + tempIcon() + "</font> <font color='" + textColor(root.tempC >= 80 ? 100 : 0) + "'>" + Math.round(root.tempC) + "\u00B0C</font>"
+        text: tempIcon() + " " + Math.round(root.tempC) + "\u00B0C"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
@@ -177,7 +177,7 @@ BarWidget {
         id: diskBtn
         anchors.fill: parent
         bar: root.bar
-        text: "<font color='" + stateColor(root.diskPercent, white) + "'>\u{F02CA}</font> <font color='" + textColor(root.diskPercent) + "'>" + Math.round(root.diskPercent) + "%</font>"
+        text: "\u{F02CA} " + Math.round(root.diskPercent) + "%"
         fontSize: Style.font.body
         horizontalMargin: 5
         verticalPadding: 2
