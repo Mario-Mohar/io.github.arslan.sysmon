@@ -43,8 +43,41 @@ def _trunc(s, n=MAX_STR):
 def _subproc(cmd, timeout=2):
     """Run a subprocess with a byte ceiling and return stdout (or '')."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return (r.stdout or "")[:MAX_SUBPROC]
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        chunks = []
+        bytes_read = 0
+        deadline = time.time() + timeout
+
+        while bytes_read < MAX_SUBPROC:
+            rem_time = deadline - time.time()
+            if rem_time <= 0:
+                break
+            # Read in small blocks up to remaining capacity
+            chunk = proc.stdout.read(min(4096, MAX_SUBPROC - bytes_read))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            bytes_read += len(chunk)
+
+        # Clean up process tree
+        try:
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, 15)  # SIGTERM
+            proc.wait(timeout=0.1)
+        except (subprocess.TimeoutExpired, OSError):
+            try:
+                pgid = os.getpgid(proc.pid)
+                os.killpg(pgid, 9)  # SIGKILL
+                proc.wait(timeout=0.1)
+            except OSError:
+                pass
+
+        return b"".join(chunks).decode("utf-8", errors="replace")
     except (subprocess.SubprocessError, OSError):
         return ""
 
