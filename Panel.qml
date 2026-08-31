@@ -344,7 +344,7 @@ Panel {
     function hide() { root.close() }
     function toggle() { root.toggle() }
     // omarchy-shell io.github.arslan.sysmon showTab proc  — opens on that tab.
-    function showTab(key) {
+    function showTab(key: string) {
       var ok = root.showTab(key)
       if (ok && !root.opened) root.openFromHotkey()
       return ok ? "ok" : "unknown"
@@ -855,7 +855,7 @@ Panel {
           // ---------- Tab bodies: only the selected one is instantiated ----------
           Loader { width: parent.width; active: root.tabKey === "overview" && root.subPage === ""; visible: active; sourceComponent: overviewTab }
           Loader { width: parent.width; active: root.tabKey === "overview" && root.subPage === "net"; visible: active; sourceComponent: netTab }
-          Loader { width: parent.width; active: root.tabKey === "overview" && root.subPage === "proc"; visible: active; sourceComponent: procTabComponent }
+          Loader { id: procLoader; width: parent.width; active: root.tabKey === "overview" && root.subPage === "proc"; visible: active; sourceComponent: procTabComponent }
           Loader { width: parent.width; active: root.tabKey === "cpu"; visible: active; sourceComponent: cpuTab }
           Loader { width: parent.width; active: root.tabKey === "temp"; visible: active; sourceComponent: tempTab }
           Loader { width: parent.width; active: root.tabKey === "mem"; visible: active; sourceComponent: memTab }
